@@ -61,3 +61,6 @@ body.color-editing #pause-menu{background:transparent;pointer-events:none}body.c
 /* One warm ivory ink color across all game interface text and states. */
 :root{--ui-ink:#f4ebd0}
 #ui,#ui *,#ui button:hover,#ui button:active,#ui button:disabled,.loading,.error{color:var(--ui-ink)!important}
+
+/* Day-phase switch in the graphics settings. */
+.time-picker{display:grid;gap:8px}.time-presets{display:flex;flex-wrap:wrap;justify-content:center;gap:4px}.time-presets button{font:12px PixelCJK,'Microsoft YaHei',sans-serif;padding:6px 8px;min-height:36px;border:1px solid #8ba58955}.time-presets button[aria-pressed="true"]{border-color:#ffdfa1;text-shadow:0 0 8px #ffffff80}

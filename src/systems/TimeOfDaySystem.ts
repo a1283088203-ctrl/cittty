@@ -16,8 +16,16 @@ const FRAMES=[
 export class TimeOfDaySystem{
  readonly daySeconds=480;elapsed=0;hour=9;day=1;phase:DayPhase='Day';night=0;sunPower=2;ambientPower=1.6;
  sky=new T.Color();sun=new T.Color();ambient=new T.Color();
+ /** Hour the clock is held at (settings time switch), or null when the day cycle runs. */
+ locked:number|null=null;
  constructor(){this.update(0);}
- update(dt:number){this.elapsed+=dt;const total=9+this.elapsed/this.daySeconds*24;this.hour=total%24;this.day=Math.floor(total/24)+1;
+ /** Hold the clock at an hour of the current day (or the next, so the day counter never runs backwards), or release it. */
+ setLock(hour:number|null){
+  this.locked=hour;
+  if(hour!==null){const total=9+this.elapsed/this.daySeconds*24;let target=Math.floor(total/24)*24+hour;if(target<9)target+=24;this.elapsed=(target-9)/24*this.daySeconds;}
+  this.update(0);
+ }
+ update(dt:number){if(this.locked===null)this.elapsed+=dt;const total=9+this.elapsed/this.daySeconds*24;this.hour=total%24;this.day=Math.floor(total/24)+1;
   this.phase=this.hour>=5&&this.hour<9?'Morning':this.hour>=9&&this.hour<16+40/60?'Day':this.hour>=16+40/60&&this.hour<18+50/60?'Sunset':'Night';
   const i=FRAMES.findIndex((f,index)=>index<FRAMES.length-1&&this.hour>=f.hour&&this.hour<FRAMES[index+1].hour),a=FRAMES[Math.max(0,i)],b=FRAMES[Math.max(0,i)+1];
   const ratio=(this.hour-a.hour)/(b.hour-a.hour),t=ratio*ratio*(3-2*ratio);
@@ -26,7 +34,7 @@ export class TimeOfDaySystem{
  }
  get clock(){return `${String(Math.floor(this.hour)).padStart(2,'0')}:${String(Math.floor(this.hour%1*60)).padStart(2,'0')}`;}
  activity(stage:number){const nightActivity=[.14,.24,.42,.68,.92][stage]??.92;return 1-this.night*(1-nightActivity);}
- reset(){this.elapsed=0;this.update(0);}
+ reset(){this.elapsed=0;if(this.locked!==null)this.setLock(this.locked);else this.update(0);}
 }
 
 
