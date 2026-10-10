@@ -21,6 +21,9 @@ export class CityScene{
  skyGradient:SkyGradient;mountains:MountainRing;
  scene=new T.Scene();renderer:T.WebGLRenderer;sun=new T.DirectionalLight(0xffe2ba,2.5);ambient=new T.HemisphereLight(0xdff5ed,0x647557,2);private stage=0;
  colorGrade?:ColorGradePass;paint?:PaintPass;tiltShift?:TiltShiftPass;composer?:EffectComposer;bloom?:UnrealBloomPass;crt?:ShaderPass;bloomScale=1;private bloomStage=0;private streetLights=[new T.PointLight(0xffd7a1,0,4,2),new T.PointLight(0xffd7a1,0,4,2)];
+ /** Warm night spill from lit buildings: a fixed pool (so shaders never recompile) parked at the doors of the
+  * buildings nearest the view centre. */
+ static BUILDING_LIGHTS=8;private buildingLights=Array.from({length:CityScene.BUILDING_LIGHTS},()=>new T.PointLight(0xffc98a,0,3.6,1.6));private lightSpot=new T.Vector3();
  constructor(parent:HTMLElement){
   // Smooth painted fog (bayer4 stays defined: the scenery fog hooks still call it, now as a no-op offset).
   T.ShaderChunk.fog_pars_fragment=`#ifdef USE_FOG\nuniform vec3 fogColor;varying float vFogDepth;\n#ifdef FOG_EXP2\nuniform float fogDensity;\n#else\nuniform float fogNear;uniform float fogFar;\n#endif\nfloat bayer4(vec2 a){return .5;}\n#endif`;
@@ -58,7 +61,7 @@ export class CityScene{
   // Soft knee: brightness ramps into the bloom over a wide band rather than a hard 0.01 cutoff.
   (this.bloom.highPassUniforms as {smoothWidth:{value:number}}).smoothWidth.value=.35;this.composer.addPass(new OutputPass());this.colorGrade=new ColorGradePass();this.colorGrade.set(FIXED_GRADE);this.composer.addPass(this.colorGrade);
   this.crt=new ShaderPass(CRT_SHADER);this.crt.enabled=false;this.composer.addPass(this.crt);
-  this.scene.add(...this.streetLights);for(const light of [this.sun,this.ambient,...this.streetLights])light.layers.enable(1);
+  this.scene.add(...this.streetLights,...this.buildingLights);for(const light of [this.sun,this.ambient,...this.streetLights,...this.buildingLights])light.layers.enable(1);
  }
  setStage(index:number){this.stage=index;}
  applyLighting(time:TimeOfDaySystem,dt:number){
@@ -77,6 +80,20 @@ export class CityScene{
    this.bloom.threshold=T.MathUtils.lerp(.62,.5,time.night);
    this.bloom.radius=.12+this.bloomStage*.15;
   }
+ }
+ /** Each building lights the ground, road and neighbours around its front door at night; bigger buildings spill
+  * more (more lit windows). Lights go to the buildings closest to `focus`, the rest stay off. */
+ setBuildingLights(buildings:{mesh:T.Object3D;data:{width:number;depth:number;height:number;level:number}}[],focus:T.Vector3,night:number){
+  const near=buildings.map(b=>({b,d:b.mesh.position.distanceToSquared(focus)})).sort((a,b)=>a.d-b.d);
+  this.buildingLights.forEach((light,i)=>{
+   const entry=near[i];
+   if(!entry||night<.01){light.intensity=0;return;}
+   const {mesh,data}=entry.b;
+   // Just outside the front wall, a little above the door, so light pools on the ground in front.
+   light.position.copy(mesh.localToWorld(this.lightSpot.set(0,-data.height/2+.9,data.depth/2+.45)));
+   light.distance=3.2+Math.min(data.width,4)*.35;
+   light.intensity=night*(2.2+Math.min(data.level,6)*.35);
+  });
  }
  setStreetLights(positions:T.Vector3[],night:number){this.streetLights.forEach((light,i)=>{light.intensity=positions[i]?night*2.4:0;if(positions[i])light.position.copy(positions[i]);});}
  render(camera:T.PerspectiveCamera){this.mountains.setView(camera);if(this.composer)this.composer.render();else this.renderer.render(this.scene,camera);}
