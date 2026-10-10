@@ -27,11 +27,11 @@ function litOnFace(g:T.Object3D,f:Face,pw:number,ph:number,depth:number,u:number
  const t=f.sign*(f.half+out);
  return f.side?litBox(g,depth,ph,pw,t,y,u,LAMP,LAMP_GLOW,2.2):litBox(g,pw,ph,depth,u,y,t,LAMP,LAMP_GLOW,2.2);
 }
-/** A sagging wire with small warm lanterns hanging from it; they glow with the night lights. */
+/** Small warm lanterns under the eaves, following a gentle sag; they glow with the night lights. The dark wire and
+ * hangers were dropped: from the game camera they only read as a stray black line across the facade. */
 function lanterns(g:T.Object3D,f:Face,u0:number,u1:number,y:number,count:number,out=.05,sag=.07){
- const segs=10,span=u1-u0,at=(t:number)=>y-sag*Math.sin(Math.PI*t);
- for(let i=0;i<segs;i++){const t=(i+.5)/segs;onFace(g,f,span/segs+.005,.012,.012,u0+span*t,at(t),out,WIRE);}
- for(let i=0;i<count;i++){const t=(i+.5)/count,u=u0+span*t;onFace(g,f,.012,.03,.012,u,at(t)-.02,out,WIRE);litOnFace(g,f,.06,.07,.06,u,at(t)-.07,out);}
+ const span=u1-u0,at=(t:number)=>y-sag*Math.sin(Math.PI*t);
+ for(let i=0;i<count;i++){const t=(i+.5)/count,u=u0+span*t;litOnFace(g,f,.06,.07,.06,u,at(t)-.07,out);}
 }
 /** Striped fabric awning stepping out and down from the wall, with a little scalloped valance. */
 function awning(g:T.Object3D,f:Face,u:number,y:number,width:number,depth:number,a:number,b:number){

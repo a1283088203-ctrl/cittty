@@ -8,7 +8,7 @@ import {box} from '../utils/mesh';
 import {seeded,clamp} from '../utils/math';
 import {key,toWorld,toCell,neighbors,fromKey,type Cell} from '../utils/grid';
 import {mountainField,mountainCell} from '../utils/mountains';
-import {vegetationMaterial} from '../utils/tree';
+import {vegetationMaterial,shrubGeometry} from '../utils/tree';
 
 /** A visual voxel landscape and shared planning mask; existing ground physics stays intact. */
 export class TerrainSystem{
@@ -49,7 +49,8 @@ export class TerrainSystem{
    }else{
     const bank=this.banks.has(k),dirt=random()<.16;
     groundTexture(box(this.group,1.5,.34,1.5,w.x,-.17,w.z,bank?0xccbe91:dirt?0xb9ad82:[0x96ba8a,0xa0c496,0x92b58c][Math.floor(random()*3)]),bank||dirt?'dirt':'grass');
-    if(bank&&random()<.55){box(this.group,.13,.34,.13,w.x+.48,.17,w.z+.42,0x638d68);box(this.group,.08,.46,.08,w.x+.32,.23,w.z+.5,0x7da475);}
+    // Riverbank: fluffy grass mounds along the water's edge soften the bank (same random draw as the old reeds).
+    if(bank&&random()<.55){const s=(seed^Math.imul(cx+1,73856093)^Math.imul(z+1,19349663))>>>0;plant(shrubGeometry(s,2),w.x+.42,0,w.z+.4);plant(shrubGeometry(s^0x9e3779b9,1),w.x+.3,0,w.z-.38);}
     if(cx>1&&cx<14&&z!==this.bridgeRow&&random()<.023){this.blocked.add(k);const rock=new T.Group();box(rock,.7,.4,.6,w.x,.2,w.z,0x8d9c85);box(rock,.44,.25,.4,w.x+.1,.48,w.z-.04,0xa9b29a);this.group.add(rock);this.rocks.set(k,rock);}
    }
   }

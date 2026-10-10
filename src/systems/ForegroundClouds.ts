@@ -103,7 +103,8 @@ export class ForegroundClouds{
   Object.assign(this.root.style,{position:'absolute',inset:'0',pointerEvents:'none',overflow:'hidden'});
   SLOTS.forEach((slot,i)=>{
    const canvas=document.createElement('canvas');
-   Object.assign(canvas.style,{position:'absolute',left:'0',top:'0',imageRendering:'pixelated',willChange:'transform,opacity',opacity:'0'});
+   // Smooth upscale plus a light blur turns the hard tone map into soft painted cloud masses.
+   Object.assign(canvas.style,{position:'absolute',left:'0',top:'0',imageRendering:'auto',filter:'blur(1.5px)',willChange:'transform,opacity',opacity:'0'});
    this.root.append(canvas);
    this.clouds.push({slot,canvas,ctx:canvas.getContext('2d')!,shape:{tones:new Uint8Array(0),w:0,h:0},image:new ImageData(1,1),
     restX:0,restY:0,away:0,phase:i*1.7,speed:.3+(i%4)*.06});
@@ -156,8 +157,7 @@ export class ForegroundClouds{
    const k=Math.min(1,Math.max(0,(this.t-c.slot.delay)/(1-c.slot.delay))),e=k*k*(3-2*k);
    const bob=this.still?0:1,x=c.restX+(1-e)*c.away+Math.sin(this.time*c.speed+c.phase)*px*4*bob;
    const y=c.restY+Math.sin(this.time*c.speed*.7+c.phase*1.3)*px*1.5*bob;
-   // Snap to the cloud's own pixel grid so the pixel art stays crisp while it drifts.
-   c.canvas.style.transform=`translate3d(${Math.round(x/px)*px}px,${Math.round(y/px)*px}px,0)`;
+   c.canvas.style.transform=`translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)`;
    c.canvas.style.opacity=(e*this.palette.opacity).toFixed(3);
   }
  }

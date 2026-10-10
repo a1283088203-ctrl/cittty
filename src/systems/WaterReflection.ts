@@ -27,7 +27,7 @@ export class WaterReflection{
     float bayer4(vec2 a){return bayer2(.5*a)*.25+bayer2(a);}
     void main(){
      // Every effect is snapped to a 0.1-unit grid so it lands on the game's pixel grain.
-     vec2 px=floor(riverPosition*10.)/10.;
+     vec2 px=riverPosition;
      vec2 uv=reflectedUv.xy/reflectedUv.w;uv.x+=sin(px.y*5.0+time*.9)*.0025;uv.y+=sin(px.x*3.0+time*.65)*.0012;
      vec3 reflection=texture2D(tDiffuse,clamp(uv,0.0,1.0)).rgb;
      vec3 water=vec3(.3,.62,.82)*mix(.28,1.,daylight);
@@ -43,8 +43,7 @@ export class WaterReflection{
      vec3 glow=mix(vec3(.62,.74,.9),vec3(1.,1.,.96),daylight);
      // Same distance fade as the outer terrain (17..43 units, 6 dithered steps), so the far river
      // dissolves into the haze with the land instead of ending in a hard edge at dusk and night.
-     float fade=smoothstep(17.,43.,length(riverPosition));fade=clamp(floor(fade*6.+bayer4(gl_FragCoord.xy*.5))/6.,0.,1.);
-     gl_FragColor=vec4(mix(mix(c,glow,shine),fogTint,fade),mix(mix(.72,1.,shine),1.,fade));
+     float fade=smoothstep(17.,43.,length(riverPosition));     gl_FragColor=vec4(mix(mix(c,glow,shine),fogTint,fade),mix(mix(.72,1.,shine),1.,fade));
      #include <tonemapping_fragment>
      #include <colorspace_fragment>
     }`
@@ -58,7 +57,7 @@ export class WaterReflection{
   // Overwriting that tag drew a dark outline where the far water tiles meet the sky.
   Object.assign(material,{blending:T.CustomBlending,blendSrc:T.SrcAlphaFactor,blendDst:T.OneMinusSrcAlphaFactor,blendSrcAlpha:T.ZeroFactor,blendDstAlpha:T.OneFactor});
   this.surface.camera.layers.set(1);
-  const texture=this.surface.getRenderTarget().texture;texture.minFilter=T.NearestFilter;texture.magFilter=T.NearestFilter;
+  const texture=this.surface.getRenderTarget().texture;texture.minFilter=T.LinearFilter;texture.magFilter=T.LinearFilter;
   const render=this.surface.onBeforeRender;let last=-Infinity;
   this.surface.onBeforeRender=(...args)=>{const now=performance.now();if(now-last<(mobile?125:66))return;last=now;render.apply(this.surface,args);};
  }

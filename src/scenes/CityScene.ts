@@ -3,7 +3,9 @@ import {MountainRing} from './MountainRing';
 import {setWaterDaylight,setWaterFog} from '../systems/WaterReflection';
 import {FIXED_GRADE} from '../data/colorGrade';
 import {ColorGradePass} from './ColorGradePass';
-import {BoundaryPass} from './BoundaryPass';
+import {PaintPass} from './PaintPass';
+import {TiltShiftPass} from './TiltShiftPass';
+import {installPaintChunks} from '../utils/paint';
 import * as T from 'three';
 import {box} from '../utils/mesh';
 import {STAGES} from '../data/progression';
@@ -18,24 +20,40 @@ import {CRT_SHADER} from './CrtPass';
 export class CityScene{
  skyGradient:SkyGradient;mountains:MountainRing;
  scene=new T.Scene();renderer:T.WebGLRenderer;sun=new T.DirectionalLight(0xffe2ba,2.5);ambient=new T.HemisphereLight(0xdff5ed,0x647557,2);private stage=0;
- colorGrade?:ColorGradePass;boundary?:BoundaryPass;composer?:EffectComposer;bloom?:UnrealBloomPass;crt?:ShaderPass;bloomScale=1;private bloomStage=0;private streetLights=[new T.PointLight(0xffd7a1,0,4,2),new T.PointLight(0xffd7a1,0,4,2)];
+ colorGrade?:ColorGradePass;paint?:PaintPass;tiltShift?:TiltShiftPass;composer?:EffectComposer;bloom?:UnrealBloomPass;crt?:ShaderPass;bloomScale=1;private bloomStage=0;private streetLights=[new T.PointLight(0xffd7a1,0,4,2),new T.PointLight(0xffd7a1,0,4,2)];
  constructor(parent:HTMLElement){
-  // Pixel-dithered fog everywhere: quantize the fog factor with an ordered Bayer matrix.
-  T.ShaderChunk.fog_pars_fragment=`#ifdef USE_FOG\nuniform vec3 fogColor;varying float vFogDepth;\n#ifdef FOG_EXP2\nuniform float fogDensity;\n#else\nuniform float fogNear;uniform float fogFar;\n#endif\nfloat bayer2(vec2 a){a=floor(a);return fract(a.x/2.+a.y*a.y*.75);}\nfloat bayer4(vec2 a){return bayer2(.5*a)*.25+bayer2(a);}\n#endif`;
-  T.ShaderChunk.fog_fragment=`#ifdef USE_FOG\n#ifdef FOG_EXP2\nfloat fogFactor=1.0-exp(-fogDensity*fogDensity*vFogDepth*vFogDepth);\n#else\nfloat fogFactor=smoothstep(fogNear,fogFar,vFogDepth);\n#endif\nfogFactor=floor(fogFactor*8.+bayer4(gl_FragCoord.xy*.5))/8.;\ngl_FragColor.rgb=mix(gl_FragColor.rgb,fogColor,fogFactor);\n#endif`;
+  // Smooth painted fog (bayer4 stays defined: the scenery fog hooks still call it, now as a no-op offset).
+  T.ShaderChunk.fog_pars_fragment=`#ifdef USE_FOG\nuniform vec3 fogColor;varying float vFogDepth;\n#ifdef FOG_EXP2\nuniform float fogDensity;\n#else\nuniform float fogNear;uniform float fogFar;\n#endif\nfloat bayer4(vec2 a){return .5;}\n#endif`;
+  T.ShaderChunk.fog_fragment=`#ifdef USE_FOG\n#ifdef FOG_EXP2\nfloat fogFactor=1.0-exp(-fogDensity*fogDensity*vFogDepth*vFogDepth);\n#else\nfloat fogFactor=smoothstep(fogNear,fogFar,vFogDepth);\n#endif\ngl_FragColor.rgb=mix(gl_FragColor.rgb,fogColor,fogFactor);\n#endif`;
+  installPaintChunks();
   // Stylized shadows: cast areas pick up a strong cool blue-grey scaled by the light's own energy; lit and ambient-lit pixels keep their original colors.
   const dirShadow='getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] )';
   const lum='dot( directLight.color, vec3( .2126, .7152, .0722 ) )';
-  T.ShaderChunk.lights_fragment_begin=T.ShaderChunk.lights_fragment_begin.replace(`directLight.color *= ( directLight.visible && receiveShadow ) ? ${dirShadow} : 1.0;`,`directLight.color = ( directLight.visible && receiveShadow ) ? mix( vec3( .15, .24, .50 ) * ${lum}, directLight.color, ${dirShadow} ) : directLight.color;`);
-  this.renderer=new T.WebGLRenderer({antialias:false,powerPreference:'high-performance'});this.renderer.setPixelRatio(this.pixelScale(innerWidth,innerHeight));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=T.PCFShadowMap;this.renderer.setClearColor(0xc9deda);parent.append(this.renderer.domElement);
- this.scene.fog=new T.Fog(0xc9deda,70,160);this.scene.add(this.ambient,this.sun);this.sun.position.set(-15,30,18);this.sun.castShadow=true;const shadowSize=matchMedia('(pointer: coarse)').matches?1024:2048;this.sun.shadow.mapSize.set(shadowSize,shadowSize);Object.assign(this.sun.shadow.camera,{left:-23,right:23,top:23,bottom:-23,near:1,far:90});this.sun.shadow.bias=-.0003;this.sun.shadow.normalBias=.025;
+  // Form shade uses the same colour: faces turned away from the sun fade into the cast-shadow blue-grey instead of
+  // going muddy dark, so the shaded side of a house and the shadow it throws read as one luminous colour.
+  // paintSun / paintLit hand the sun's shadow factor to the Lambert BRDF (point and spot lights keep plain Lambert).
+  T.ShaderChunk.lights_fragment_begin=T.ShaderChunk.lights_fragment_begin.replace(`directLight.color *= ( directLight.visible && receiveShadow ) ? ${dirShadow} : 1.0;`,`paintSun = 1.0; paintLit = ( directLight.visible && receiveShadow ) ? ${dirShadow} : 1.0;`).replace('pointLight = pointLights[ i ];','pointLight = pointLights[ i ]; paintSun = 0.0;').replace('spotLight = spotLights[ i ];','spotLight = spotLights[ i ]; paintSun = 0.0;');
+  T.ShaderChunk.lights_lambert_pars_fragment=T.ShaderChunk.lights_lambert_pars_fragment.replace('vec3 irradiance = dotNL * directLight.color;',`vec3 irradiance = dotNL * directLight.color;
+	// The fixed blue-grey only suits a warm sun. Under the already-blue moonlight it turned shaded grass a saturated
+	// teal, so the tint fades with the light's warmth: at night shade is simply dimmer moonlight, same hue as lit ground.
+	float paintWarm = smoothstep( 0., .3, ( directLight.color.r - directLight.color.b ) / max( max( directLight.color.r, directLight.color.b ), 1e-4 ) );
+	vec3 paintShade = mix( directLight.color * .24, vec3( .15, .24, .50 ) * ${lum}, paintWarm );
+	if ( paintSun > .5 ) irradiance = mix( paintShade, directLight.color, dotNL * paintLit );`).replace('varying vec3 vViewPosition;','varying vec3 vViewPosition;\nfloat paintSun = 0.0; float paintLit = 1.0;');
+  this.renderer=new T.WebGLRenderer({antialias:true,powerPreference:'high-performance'});this.renderer.setPixelRatio(this.pixelScale(innerWidth,innerHeight));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=T.PCFShadowMap;this.renderer.setClearColor(0xc9deda);parent.append(this.renderer.domElement);
+ this.scene.fog=new T.Fog(0xc9deda,70,160);this.scene.add(this.ambient,this.sun);this.sun.position.set(-15,30,18);this.sun.castShadow=true;// The shadow area covers the whole scenery ring (±52), not just the city, so background hills, mountains and trees
+ // get light and shade too. A larger map keeps the city's shadows about as sharp as before.
+ const shadowSize=matchMedia('(pointer: coarse)').matches?2048:4096;this.sun.shadow.mapSize.set(shadowSize,shadowSize);Object.assign(this.sun.shadow.camera,{left:-52,right:52,top:52,bottom:-52,near:1,far:220});this.sun.shadow.bias=-.0004;this.sun.shadow.normalBias=.04;
  box(this.scene,24,1,24,0,-.85,0,0x9a9870);box(this.scene,24.6,.4,24.6,0,-1.2,0,0x557f78);box(this.scene,25,.18,25,0,-1.48,0,0x789a87);
  for(const s of [-1,1]){box(this.scene,24.5,.3,.25,0,.05,s*12.2,0xe3d7b8);box(this.scene,.25,.3,24.5,s*12.2,.05,0,0xe3d7b8);}
  this.skyGradient=new SkyGradient(this.scene);this.mountains=new MountainRing(this.scene);this.setStage(0);
  }
- enablePostProcessing(camera:T.PerspectiveCamera){
+ enablePostProcessing(camera:T.PerspectiveCamera,focusTarget?:T.Vector3){
   this.renderer.toneMapping=T.ACESFilmicToneMapping;this.renderer.toneMappingExposure=Math.pow(2,FIXED_GRADE.exposure);
-  this.composer=new EffectComposer(this.renderer);for(const target of [this.composer.renderTarget1,this.composer.renderTarget2])target.depthTexture=new T.DepthTexture(target.width,target.height,T.UnsignedIntType);this.composer.addPass(new RenderPass(this.scene,camera));this.boundary=new BoundaryPass(camera);this.composer.addPass(this.boundary);
+  this.composer=new EffectComposer(this.renderer);for(const target of [this.composer.renderTarget1,this.composer.renderTarget2])target.depthTexture=new T.DepthTexture(target.width,target.height,T.UnsignedIntType);this.composer.addPass(new RenderPass(this.scene,camera));
+  // Painterly Kuwahara pass replaces the old depth-outline BoundaryPass (file kept, no longer in the chain).
+  this.paint=new PaintPass(camera);this.composer.addPass(this.paint);
+  // Miniature depth of field on top of the painted image, before bloom so lamp glows stay round.
+  const paint=this.paint;this.tiltShift=new TiltShiftPass(camera,()=>paint.depth,focusTarget);this.composer.addPass(this.tiltShift);
   this.bloom=new UnrealBloomPass(new T.Vector2(innerWidth/2,innerHeight/2),.12,.18,1.25);this.composer.addPass(this.bloom);
   // Soft knee: brightness ramps into the bloom over a wide band rather than a hard 0.01 cutoff.
   (this.bloom.highPassUniforms as {smoothWidth:{value:number}}).smoothWidth.value=.35;this.composer.addPass(new OutputPass());this.colorGrade=new ColorGradePass();this.colorGrade.set(FIXED_GRADE);this.composer.addPass(this.colorGrade);
@@ -47,8 +65,9 @@ export class CityScene{
   this.scene.background=null;
   this.skyGradient.update(time.night,time.hour);(this.scene.fog as T.Fog).color.copy(this.skyGradient.fogColor);this.mountains.update(this.skyGradient.fogColor,this.skyGradient.material.uniforms.upper.value,dt,this.skyGradient.sunset,time.night);
   this.sun.color.copy(time.sun);this.sun.intensity=time.sunPower;this.ambient.color.copy(time.ambient);this.ambient.intensity=time.ambientPower;
-  const angle=(time.hour-6)/24*Math.PI*2;this.sun.position.set(Math.cos(angle)*28,Math.max(9,Math.sin(angle)*35),18);
-  setNightLights(time.night,dt);setWaterDaylight(1-time.night);setWaterFog(this.skyGradient.fogColor);this.boundary?.update(this.ambient,this.sun,time.sky,this.scene.fog as T.Fog);
+  const angle=(time.hour-6)/24*Math.PI*2;// Same sun direction as before, pushed out to 110 units so the wider shadow box never clips scenery behind the light.
+  this.sun.position.set(Math.cos(angle)*28,Math.max(9,Math.sin(angle)*35),18).setLength(110);
+  setNightLights(time.night,dt);setWaterDaylight(1-time.night);setWaterFog(this.skyGradient.fogColor);
   this.bloomStage+=(STAGES[Math.max(0,this.stage)].bloom-this.bloomStage)*(1-Math.exp(-dt*.25));
   if(this.bloom){
    // Daylight highlights need a visible baseline; keep the established night glow.
@@ -61,10 +80,10 @@ export class CityScene{
  }
  setStreetLights(positions:T.Vector3[],night:number){this.streetLights.forEach((light,i)=>{light.intensity=positions[i]?night*2.4:0;if(positions[i])light.position.copy(positions[i]);});}
  render(camera:T.PerspectiveCamera){this.mountains.setView(camera);if(this.composer)this.composer.render();else this.renderer.render(this.scene,camera);}
- /** Keep the pixel-grain look on any screen: render scale is capped by an absolute buffer size, so fullscreen on large monitors never gets smoother than the intended grain. UI is DOM and stays crisp. */
+ /** Native-resolution painted look, so zoomed-out detail stays sharp. The buffer is capped at 2560x1440 on desktop
+  * and 1920x1080 on phones; brush size scales with it (PaintPass.setSize), so strokes look the same. */
  private pixelScale(w:number,h:number){const coarse=matchMedia('(pointer: coarse)').matches;
-  // On phones the scale cap is what limits sharpness (the pixel caps sit above a phone's CSS size); 0.75 trades some fill rate for clarity.
-  return Math.min(coarse?.75:.5,(coarse?880:960)/Math.max(w,h),(coarse?520:540)/Math.min(w,h));}
+  return Math.min(devicePixelRatio,2,(coarse?1920:2560)/Math.max(w,h),(coarse?1080:1440)/Math.min(w,h));}
  setCrt(on:boolean){if(this.crt)this.crt.enabled=on;}
  resize(w:number,h:number){const scale=this.pixelScale(w,h);this.renderer.setPixelRatio(scale);this.renderer.setSize(w,h);if(this.composer){this.composer.setPixelRatio(scale);this.composer.setSize(w,h);}if(this.crt)(this.crt.uniforms.resolution.value as T.Vector2).set(w*scale,h*scale);}
 }

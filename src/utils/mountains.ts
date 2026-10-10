@@ -40,25 +40,46 @@ export type Plant=(geometry:T.BufferGeometry,x:number,y:number,z:number)=>void;
  * taller ones are a soil-coloured cliff with a grass tile on top, a few left as bare soil so the tops blend
  * grass <-> soil exactly like the city ground. The highest cells keep a snow cap.
  */
-export function mountainCell(add:Add,plant:Plant,x:number,z:number,bottom:number,top:number,crest:number,r:()=>number){
- const snow=top>=crest*.78,low=top<.6,bare=!snow&&!low&&r()<.2;
+export function mountainCell(add:Add,plant:Plant,x:number,z:number,bottom:number,top:number,crest:number,r:()=>number,size=1.5){
+ const snow=top>=crest*.78,low=top<.6;
+ // Mixed block sizes: some standard cells break up into four small blocks of uneven height (recursion stops there).
+ if(size===1.5&&!snow&&top>=1&&r()<.3){
+  const steps=[-.5,-.25,0,.25,.5];
+  for(const ox of [-.375,.375])for(const oz of [-.375,.375])
+   mountainCell(add,plant,x+ox,z+oz,bottom,Math.max(.5,top+steps[Math.floor(r()*5)]),crest,r,.75);
+  return;
+ }
+ const small=size<1.5,bare=!snow&&!low&&r()<.2,half=size/2;
  const grass=()=>GRASS[Math.floor(r()*3)];
  // The whole column, sides included, is a grass tile; bare cells get a thin soil slab on top instead.
- const body=add(1.5,top-bottom,1.5,x,(top+bottom)/2,z,grass());
+ const body=add(size,top-bottom,size,x,(top+bottom)/2,z,grass());
  groundTexture(body,'grass');
- if(bare){const soil=add(1.5,.06,1.5,x,top+.02,z,DIRT);groundTexture(soil,'dirt');}
+ if(bare){const soil=add(size,.06,size,x,top+.02,z,DIRT);groundTexture(soil,'dirt');}
  if(snow){
   // Overhanging snow slab with a few drips down the sides.
-  const cap=add(1.54,.14,1.54,x,top-.05,z,SNOW);groundTexture(cap,'dirt');
-  for(let i=0;i<3;i++){const a=Math.floor(r()*4),u=(r()-.5)*1.1,len=.15+r()*.3,o=.77;
+  const cap=add(size+.04,.14,size+.04,x,top-.05,z,SNOW);groundTexture(cap,'dirt');
+  for(let i=0,n=Math.round(size*2);i<n;i++){const a=Math.floor(r()*4),u=(r()-.5)*size*.73,len=.15+r()*.3,o=half+.02;
    a<2?add(.18,len,.04,x+u,top-.12-len/2,z+(a?o:-o),SNOW):add(.04,len,.18,x+(a===2?o:-o),top-.12-len/2,z+u,SNOW);}
   return;
  }
- const ground=top+(bare?.05:0),k=r(),px=x+(r()-.5)*.5,pz=z+(r()-.5)*.5,seed=Math.floor(r()*0x7fffffff);
- if(bare){if(k<.5)rock(add,px,ground,pz);return;}
- if(k<.38)plant(treeGeometry(seed,k<.19?1+Math.floor(r()*3):0),px,ground,pz);
- else if(k<.54)plant(shrubGeometry(seed,2+Math.floor(r()*3)),px,ground,pz);
- else if(k<.64)rock(add,px,ground,pz);
+ // A smaller block stacked off-centre on some big tops, so slopes read as heaps of blocks rather than one grid.
+ let lump=false;
+ if(!small&&!bare&&r()<.25){
+  const s=size*(.38+r()*.2),lh=.25+r()*.3,room=(size-s)/2,lx=x+(r()*2-1)*room,lz=z+(r()*2-1)*room;
+  const block=add(s,lh,s,lx,top+lh/2,lz,grass());groundTexture(block,'grass');lump=true;
+  if(r()<.5)plant(shrubGeometry(Math.floor(r()*0x7fffffff),1),lx,top+lh,lz);
+ }
+ // Soft painted edges: grass mounds overhang the block's rim and hide the hard step corner.
+ for(let i=0,n=small?(r()<.5?1:0):Math.round(size*.7+r()*1.2);i<n;i++){const a=Math.floor(r()*4),u=(r()-.5)*size*.73,o=half*.88;
+  plant(shrubGeometry(Math.floor(r()*0x7fffffff),small?1:2),x+(a<2?u:a===2?o:-o),top-.06,z+(a<2?(a?o:-o):u));}
+ // Big blocks carry more than one feature; small blocks only get shrubs or a rock.
+ for(let i=0,n=size>2?2:lump?0:1;i<n;i++){
+  const ground=top+(bare?.05:0),k=r(),px=x+(r()-.5)*size*.33,pz=z+(r()-.5)*size*.33,seed=Math.floor(r()*0x7fffffff);
+  if(bare){if(k<.5)rock(add,px,ground,pz);continue;}
+  if(k<.38&&!small)plant(treeGeometry(seed,k<.19?1+Math.floor(r()*3):0),px,ground,pz);
+  else if(k<.54)plant(shrubGeometry(seed,small?1:2+Math.floor(r()*3)),px,ground,pz);
+  else if(k<.64&&!small)rock(add,px,ground,pz);
+ }
 }
 /** The build area's rock: two stacked blocks. */
 function rock(add:Add,x:number,y:number,z:number){

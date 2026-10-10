@@ -18,7 +18,9 @@ export function buildingModel(data:BuildingData,ghost=false,era=0,variant=0){
  if(isFuture(data.level))futureBuilding(g,data,variant);else if(isModern(data.level))modernBuilding(g,data,variant);else classicModel(g,data,era,variant);
  // Small lived-in props (string lights, parasols, birds, potted plants, ivy…) on top of every style.
  addProps(g,data,variant,era);
- if(ghost)g.traverse(o=>{if(o instanceof T.Mesh){o.material=(o.material as T.Material).clone();Object.assign(o.material,{transparent:true,opacity:.32,depthWrite:false});o.castShadow=false;o.userData.ghost=true;}});
+ if(ghost)g.traverse(o=>{if(o instanceof T.Mesh){o.material=(o.material as T.Material).clone();// depthWrite: the preview writes its own depth, so the tilt-shift pass sees it at its real distance instead of
+ // blurring it like the background behind it.
+ Object.assign(o.material,{transparent:true,opacity:.32,depthWrite:true});o.castShadow=false;o.userData.ghost=true;}});
  if(ghost)addPreviewOutline(g,data.width,data.depth);
  return g;
 }

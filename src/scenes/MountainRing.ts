@@ -30,12 +30,12 @@ export class MountainRing{
  }
  constructor(scene:T.Scene,radius=118,base=-6,top=30){
   const texture=new T.TextureLoader().load(new URL('textures/mountains.png',document.baseURI).href);
-  texture.wrapS=T.RepeatWrapping;texture.magFilter=T.NearestFilter;texture.minFilter=T.NearestFilter;texture.generateMipmaps=false;
+  texture.wrapS=T.RepeatWrapping;texture.magFilter=T.LinearFilter;texture.minFilter=T.LinearFilter;texture.generateMipmaps=false;
   // Extends well below the horizon so the solid foothill band hides the void beneath the scenery tiles.
   const bottom=base-40,geometry=new T.CylinderGeometry(radius,radius,top-bottom,96,1,true).translate(0,(top+bottom)/2,0);
   // Cloud mask on the same rows as the ridges, regenerated for every new city (see rerollClouds).
   const clouds=this.cloudTexture;
-  clouds.wrapS=T.RepeatWrapping;clouds.magFilter=T.NearestFilter;clouds.minFilter=T.NearestFilter;clouds.generateMipmaps=false;
+  clouds.wrapS=T.RepeatWrapping;clouds.magFilter=T.LinearFilter;clouds.minFilter=T.LinearFilter;clouds.generateMipmaps=false;
   this.rerollClouds();
   const material=new T.ShaderMaterial({side:T.BackSide,depthWrite:false,fog:false,
    uniforms:{map:{value:texture},clouds:{value:clouds},far:{value:this.far},mid:{value:this.mid},near:{value:this.near},cloudBack:{value:this.cloudBack},cloudFront:{value:this.cloudFront},drift:this.drift,parallax:{value:this.parallax},range:{value:new T.Vector2(base,top)},repeats:{value:3},haze:{value:this.haze},hazeHeight:{value:.5}},
@@ -62,8 +62,7 @@ export class MountainRing{
      if(mNear>.5){c=near;cloud=false;}
      // Ground haze: the ridge feet dissolve into the fog color, dithered in the same pixel steps as the scene fog.
      // Low clouds only fade right at their base, so they stay white just above the horizon.
-     float h=1.-smoothstep(-.05,cloud?hazeHeight*.45:hazeHeight,v);h=floor(h*8.+bayer4(gl_FragCoord.xy*.5))/8.;
-     c=mix(c,haze,clamp(h,0.,1.));
+     float h=1.-smoothstep(-.05,cloud?hazeHeight*.45:hazeHeight,v);     c=mix(c,haze,clamp(h,0.,1.));
      // Same alpha tag as the outer scenery so the boundary pass leaves the silhouettes untouched.
      gl_FragColor=vec4(c,.75);}`});
   this.mesh=new T.Mesh(geometry,material);this.mesh.name='mountain-ring';this.mesh.frustumCulled=false;this.mesh.renderOrder=-9000;

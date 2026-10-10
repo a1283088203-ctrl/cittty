@@ -17,7 +17,7 @@ function sceneryVegetation(){
   shader.vertexShader='varying vec2 sceneryXZ;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nsceneryXZ=(modelMatrix*vec4(position,1.0)).xz;');
   shader.fragmentShader='varying vec2 sceneryXZ;\n'+shader.fragmentShader;
   shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>','#include <opaque_fragment>\ngl_FragColor.a=.75;');
-  shader.fragmentShader=shader.fragmentShader.replace('#include <fog_fragment>','#include <fog_fragment>\n#ifdef USE_FOG\n{float sceneryFog=smoothstep(17.0,43.0,length(sceneryXZ));sceneryFog=floor(sceneryFog*6.+bayer4(gl_FragCoord.xy*.5))/6.;gl_FragColor.rgb=mix(gl_FragColor.rgb,fogColor,sceneryFog);}\n#endif');
+  shader.fragmentShader=shader.fragmentShader.replace('#include <fog_fragment>','#include <fog_fragment>\n#ifdef USE_FOG\n{float sceneryFog=smoothstep(17.0,43.0,length(sceneryXZ));gl_FragColor.rgb=mix(gl_FragColor.rgb,fogColor,sceneryFog);}\n#endif');
  };
  material.customProgramCacheKey=()=>'scenery-vegetation-v1';
  return sceneryVegetationMaterial=material;
@@ -37,7 +37,8 @@ export class SurroundingTerrainSystem{
   const ends=[0,15].map(row=>{const cells=[...river].map(fromKey).filter(p=>p.z===row);return cells.reduce((n,p)=>n+toWorld(p).x,0)/Math.max(1,cells.length);});
   const channels=new Map<number,number>();
   for(const side of [-1,1]){let x=ends[side<0?0:1];for(let row=0;row<12;row++){channels.set(side*(13.5+row*3),x);x=clamp(x+(random()-.5)*2.4,-15,15);}}
-  const add=(w:number,h:number,d:number,x:number,y:number,z:number,color:number)=>{const m=box(this.group,w,h,d,x,y,z,color);m.castShadow=false;m.receiveShadow=false;return m;};
+  // Scenery casts and receives the sun's (blue-grey) shadows like the city, so the background has light and shade too.
+  const add=(w:number,h:number,d:number,x:number,y:number,z:number,color:number)=>box(this.group,w,h,d,x,y,z,color);
   const leaf=(w:number,h:number,d:number,x:number,y:number,z:number,color:number)=>{
    const m=add(w,h,d,x,y,z,color);m.geometry=m.geometry.clone();m.userData.batchedGeometry=true;
    const count=m.geometry.attributes.position.count,centers=new Float32Array(count*3),delays=new Float32Array(count),delay=random()*.45;
@@ -45,7 +46,7 @@ export class SurroundingTerrainSystem{
    m.geometry.setAttribute('leafCenter',new T.BufferAttribute(centers,3));m.geometry.setAttribute('leafDelay',new T.BufferAttribute(delays,1));
   };
   // Build-area trees and shrubs on the mountains; they keep the shared wind material (skipped by the fog clone below).
-  const plant=(geometry:T.BufferGeometry,px:number,py:number,pz:number)=>{const m=new T.Mesh(geometry,sceneryVegetation());m.position.set(px,py,pz);m.userData.batchedGeometry=true;this.group.add(m);};
+  const plant=(geometry:T.BufferGeometry,px:number,py:number,pz:number)=>{const m=new T.Mesh(geometry,sceneryVegetation());m.position.set(px,py,pz);m.castShadow=true;m.receiveShadow=true;m.userData.batchedGeometry=true;this.group.add(m);};
   // The mountain range shared with TerrainSystem climbs on out here to snowy peaks. It has its own random stream
   // so the rivers stay the same for a seed.
   const peaks=seeded(seed^0x7d3a11),crest=field.crest;
@@ -67,7 +68,12 @@ export class SurroundingTerrainSystem{
    if(peak>=.5){
     // Mountains use the build area's 1.5-unit cells and its ground texture, so the range reads at the same
     // pixel grain as the city and its tops blend meadow -> rock -> snow like the grass/soil edges inside.
-    for(const ox of [-.75,.75])for(const oz of [-.75,.75])mountainCell(add,plant,x+ox,z+oz,-2,Math.max(lowland,mountain(x+ox,z+oz,channel)),crest,peaks);
+    const corners=[[-.75,-.75],[.75,-.75],[-.75,.75],[.75,.75]].map(([ox,oz])=>({ox,oz,h:Math.max(lowland,mountain(x+ox,z+oz,channel))}));
+    const hs=corners.map(c=>c.h),hi=Math.max(...hs),lo=Math.min(...hs);
+    // Big blocks: where the slope is gentle, the four cells of this tile merge into one 3x3 block,
+    // so the range mixes large slabs with the standard cells and the small split blocks.
+    if(hi-lo<=1&&hi<crest*.78&&peaks()<.35)mountainCell(add,plant,x,z,-2,Math.round(hs.reduce((s,h)=>s+h,0)/2)/2,crest,peaks,3);
+    else for(const c of corners)mountainCell(add,plant,x+c.ox,z+c.oz,-2,c.h,crest,peaks);
     continue;
    }
    const color=water?0x67adb5:bank?0xccbe91:grass;
@@ -102,7 +108,7 @@ export class SurroundingTerrainSystem{
    if(foliage){shader.uniforms.sceneryDecay=this.decay;shader.vertexShader='uniform float sceneryDecay;attribute vec3 leafCenter;attribute float leafDelay;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ntransformed=leafCenter+(transformed-leafCenter)*(1.0-smoothstep(leafDelay,leafDelay+.55,sceneryDecay));');}
    shader.fragmentShader='varying vec2 sceneryXZ;\n'+shader.fragmentShader;
    shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>','#include <opaque_fragment>\ngl_FragColor.a=.75;');
-   shader.fragmentShader=shader.fragmentShader.replace('#include <fog_fragment>','#include <fog_fragment>\n#ifdef USE_FOG\n{float sceneryFog=smoothstep(17.0,43.0,length(sceneryXZ));sceneryFog=floor(sceneryFog*6.+bayer4(gl_FragCoord.xy*.5))/6.;gl_FragColor.rgb=mix(gl_FragColor.rgb,fogColor,sceneryFog);}\n#endif');
+   shader.fragmentShader=shader.fragmentShader.replace('#include <fog_fragment>','#include <fog_fragment>\n#ifdef USE_FOG\n{float sceneryFog=smoothstep(17.0,43.0,length(sceneryXZ));gl_FragColor.rgb=mix(gl_FragColor.rgb,fogColor,sceneryFog);}\n#endif');
   };material.customProgramCacheKey=()=> 'scenery-distance-fog-v3-'+foliage+'-'+(material.userData.groundKind??'plain');o.material=material;this.materials.push(material);});
  }
  update(dt:number,maxLevel:number){

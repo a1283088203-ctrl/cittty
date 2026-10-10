@@ -36,36 +36,25 @@ export function configureGroundTexture(material:T.MeshLambertMaterial){
    vec3 groundHash(vec2 p){vec3 h=fract(vec3(p.xyx)*vec3(.1031,.1030,.0973));h+=dot(h,h.yxz+33.33);return fract((h.xxy+h.yzz)*h.zyx);}
    vec4 groundNeighbor(vec2 cell,vec4 fallback){vec4 c=texture2D(terrainPalette,(cell+.5)/64.);return c.a>.1?c:fallback;}
   `+shader.fragmentShader;
-  // Stable per-cell crops and orientations remove the repeating narrow grass strip.
-  // Keep one texture lookup and quantized pixels for mobile performance and voxel detail.
+  // Painted ground: the neighbouring cells' colours blend across a smooth, noise-warped brush edge (no pixel snap,
+  // no hard steps), so grass meets soil along an organic, hand-brushed line. The cell grid itself is unchanged.
   shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
-   vec2 pixelPosition=(floor(groundPosition.xz*64.)+.5)/64.;
-   vec2 mapPosition=(pixelPosition+48.)/1.5;
+   vec2 mapPosition=(groundPosition.xz+48.)/1.5;
    vec4 original=texture2D(terrainPalette,(floor(mapPosition)+.5)/64.);
-   // Quantized irregular boundaries form grass -> pale grass -> soil bands.
-   vec2 edgeNoise=(groundHash(floor(pixelPosition*9.)).xy-.5)*.16;
-   vec2 blendPosition=mapPosition-.5+edgeNoise;
+   vec3 gp=vec3(groundPosition.xz,0.).xzy;
+   vec2 warp=vec2(pNoise(gp*1.3),pNoise(gp*1.3+11.))-.5;
+   vec2 blendPosition=mapPosition-.5+warp*.55+(vec2(pNoise(gp*5.),pNoise(gp*5.+4.))-.5)*.12;
    vec2 baseCell=floor(blendPosition);
-   vec2 blend=smoothstep(vec2(.28),vec2(.72),fract(blendPosition));
-   blend=floor(blend*4.+.5)/4.;
+   vec2 blend=smoothstep(vec2(.3),vec2(.7),fract(blendPosition));
    vec4 a=groundNeighbor(baseCell,original),b=groundNeighbor(baseCell+vec2(1,0),original);
    vec4 c=groundNeighbor(baseCell+vec2(0,1),original),d=groundNeighbor(baseCell+vec2(1,1),original);
    vec4 terrain=mix(mix(a,b,blend.x),mix(c,d,blend.x),blend.y);
    float soilBlend=clamp((terrain.a-100./255.)/(100./255.),0.,1.);
-   vec3 terrainColor=terrain.rgb*(1.+.075*4.*soilBlend*(1.-soilBlend));
+   vec3 terrainColor=terrain.rgb*(1.+.3*soilBlend*(1.-soilBlend));
    if(original.a>.1)diffuseColor.rgb*=mix(vec3(1.),terrainColor/max(original.rgb,vec3(.02)),groundTop);
-   vec2 cell=floor(pixelPosition/.75);
-   vec3 variation=groundHash(cell);
-   vec2 localUV=fract(pixelPosition/.75);
-   if(variation.x>.5)localUV=localUV.yx;
-   if(variation.y>.5)localUV.x=1.-localUV.x;
-   if(variation.z>.5)localUV.y=1.-localUV.y;
-   float cropScale=mix(.65,1.,variation.z);
-   vec2 groundUV=vec2(variation.x*.88,${kind==='grass'?'.015':'.29+variation.y*.24'})+localUV*vec2(.08,.12)*cropScale;
-   vec3 groundSample=texture2D(groundAtlas,groundUV).rgb;
-   float detail=clamp(dot(groundSample,vec3(.2126,.7152,.0722))/${kind==='grass'?'.40':'.46'},.86,1.11);
-   detail=mix(1.,detail,mix(.5,.85,variation.y));
-   diffuseColor.rgb*=mix(1.,detail,groundTop*.45);`);
+   // Only a very broad, low-contrast tone drift; the fine brush dabs were removed so the ground reads clean.
+   float dab=pNoise(gp*.6);
+   ${kind==='grass'?'diffuseColor.rgb*=mix(vec3(.97,.985,.99),vec3(1.03,1.02,.98),dab);':'diffuseColor.rgb*=mix(.98,1.02,dab);'}`);
  };
- material.customProgramCacheKey=()=>`ground-transition-v8-${kind}`;
+ material.customProgramCacheKey=()=>`ground-paint-v1-${kind}`;
 }
