@@ -25,6 +25,7 @@ import {DemolitionSystem} from '../systems/DemolitionSystem';
 import {TouchInputSystem} from '../systems/TouchInputSystem';
 import {ForegroundClouds} from '../systems/ForegroundClouds';
 import {mountTimePickers} from '../systems/TimePicker';
+import {ColorPanel} from '../systems/ColorPanel';
 import {buildingModel} from '../entities/Building';
 import {randomBuildingVariant} from '../entities/BuildingDecorations';
 import {buildingData,MAX_LEVEL} from '../data/buildings';
@@ -54,7 +55,9 @@ export class Game{
  bloomSlider.addEventListener('input',()=>{const v=Number(bloomSlider.value);bloomValue.textContent=`${v}%`;this.city.bloomScale=v/100;try{localStorage.setItem('stack-city-bloom',String(v));}catch{}});
  // Day-phase switch in the graphics settings (auto / dawn / day / dusk / night + hour slider); lighting re-applies at
  // once, even while paused.
- this.refreshTimePickers=mountTimePickers(this.time,[document.querySelector<HTMLElement>('.pause-panel .gfx-settings')!],()=>this.city.applyLighting(this.time,0));
+ // Colour lab (one grade per time of day, live over the game); its own copy of the time switch sits inside it.
+ const colorPanel=new ColorPanel(this.city.grades,override=>{this.city.gradeOverride=override;this.city.gradeRevision++;this.city.applyLighting(this.time,0);});
+ this.refreshTimePickers=mountTimePickers(this.time,[document.querySelector<HTMLElement>('.pause-panel .gfx-settings')!,colorPanel.timeSlot],()=>this.city.applyLighting(this.time,0));
  this.restart();this.resize();window.addEventListener('resize',()=>this.resize());window.visualViewport?.addEventListener('resize',()=>this.resize());window.visualViewport?.addEventListener('scroll',()=>this.resize());document.addEventListener('visibilitychange',()=>{this.last=0;this.accumulator=0;});requestAnimationFrame(this.frame);}
  private restart(){this.setPaused(false);this.missileMode=false;this.demolition.reset();this.ui.tool(false,0);this.touch?.reset();this.ui.resetScore();this.sound.restart();this.buildings.clear();this.physics.reset();this.merge.reset();this.effects.clear();this.wind.reset();this.time.reset();this.terrain.generate();this.city.mountains.rerollClouds();this.roads.reset();this.npcs.reset();this.vehicles.reset();this.decorations.reset();this.progress.reset();this.buildings.era=0;this.camera.reset();this.buildingQueue.reset();this.current=this.rollNext();this.next=this.rollNext();this.currentVariant=randomBuildingVariant();this.nextVariant=randomBuildingVariant();this.yaw=0;this.x=0;this.z=0;this.cooldown=0;this.warning=0;this.over=false;this.accumulator=0;this.ui.end(false);this.ui.warning(0);
  // Three modest households make the initial district alive while leaving the center open.

@@ -1,8 +1,8 @@
 import {SkyGradient} from './SkyGradient';
 import {MountainRing} from './MountainRing';
 import {setWaterDaylight,setWaterFog} from '../systems/WaterReflection';
-import {FIXED_GRADE} from '../data/colorGrade';
-import {ColorGradePass} from './ColorGradePass';
+import {PHASE_GRADES} from '../data/colorGrade';
+import {ColorGradePass,blendPhases,type Grade,type PhaseGrades} from './ColorGradePass';
 import {PaintPass} from './PaintPass';
 import {TiltShiftPass} from './TiltShiftPass';
 import {installPaintChunks} from '../utils/paint';
@@ -51,7 +51,7 @@ export class CityScene{
  this.skyGradient=new SkyGradient(this.scene);this.mountains=new MountainRing(this.scene);this.setStage(0);
  }
  enablePostProcessing(camera:T.PerspectiveCamera,focusTarget?:T.Vector3){
-  this.renderer.toneMapping=T.ACESFilmicToneMapping;this.renderer.toneMappingExposure=Math.pow(2,FIXED_GRADE.exposure);
+  this.renderer.toneMapping=T.ACESFilmicToneMapping;this.renderer.toneMappingExposure=Math.pow(2,this.grades.day.exposure);
   this.composer=new EffectComposer(this.renderer);for(const target of [this.composer.renderTarget1,this.composer.renderTarget2])target.depthTexture=new T.DepthTexture(target.width,target.height,T.UnsignedIntType);this.composer.addPass(new RenderPass(this.scene,camera));
   // Painterly Kuwahara pass replaces the old depth-outline BoundaryPass (file kept, no longer in the chain).
   this.paint=new PaintPass(camera);this.composer.addPass(this.paint);
@@ -59,7 +59,7 @@ export class CityScene{
   const paint=this.paint;this.tiltShift=new TiltShiftPass(camera,()=>paint.depth,focusTarget);this.composer.addPass(this.tiltShift);
   this.bloom=new UnrealBloomPass(new T.Vector2(innerWidth/2,innerHeight/2),.12,.18,1.25);this.composer.addPass(this.bloom);
   // Soft knee: brightness ramps into the bloom over a wide band rather than a hard 0.01 cutoff.
-  (this.bloom.highPassUniforms as {smoothWidth:{value:number}}).smoothWidth.value=.35;this.composer.addPass(new OutputPass());this.colorGrade=new ColorGradePass();this.colorGrade.set(FIXED_GRADE);this.composer.addPass(this.colorGrade);
+  (this.bloom.highPassUniforms as {smoothWidth:{value:number}}).smoothWidth.value=.35;this.composer.addPass(new OutputPass());this.colorGrade=new ColorGradePass();this.colorGrade.set(this.grades.day);this.composer.addPass(this.colorGrade);
   this.crt=new ShaderPass(CRT_SHADER);this.crt.enabled=false;this.composer.addPass(this.crt);
   this.scene.add(...this.streetLights,...this.buildingLights);for(const light of [this.sun,this.ambient,...this.streetLights,...this.buildingLights])light.layers.enable(1);
  }
@@ -70,6 +70,7 @@ export class CityScene{
   this.sun.color.copy(time.sun);this.sun.intensity=time.sunPower;this.ambient.color.copy(time.ambient);this.ambient.intensity=time.ambientPower;
   const angle=(time.hour-6)/24*Math.PI*2;// Same sun direction as before, pushed out to 110 units so the wider shadow box never clips scenery behind the light.
   this.sun.position.set(Math.cos(angle)*28,Math.max(9,Math.sin(angle)*35),18).setLength(110);
+  this.applyGrade(time.night,this.skyGradient.sunset);
   setNightLights(time.night,dt);setWaterDaylight(1-time.night);setWaterFog(this.skyGradient.fogColor);
   this.bloomStage+=(STAGES[Math.max(0,this.stage)].bloom-this.bloomStage)*(1-Math.exp(-dt*.25));
   if(this.bloom){
@@ -95,6 +96,19 @@ export class CityScene{
    light.intensity=night*(2.2+Math.min(data.level,6)*.35);
   });
  }
+ /** Grades for day, dusk (also sunrise) and night; blended every frame by the light. `override` shows one grade as is
+  * (the colour lab's compare button uses the neutral grade). */
+ grades:PhaseGrades=PHASE_GRADES();gradeOverride:Grade|null=null;private gradeKey='';
+ private applyGrade(night:number,sunset:number){
+  if(!this.colorGrade)return;
+  // Only re-upload the LUT when the blend actually moved (it eases slowly, so most frames skip).
+  const key=this.gradeOverride?'o'+JSON.stringify(this.gradeOverride):`${night.toFixed(3)}|${sunset.toFixed(3)}|${this.gradeRevision}`;
+  if(key===this.gradeKey)return;this.gradeKey=key;
+  const g=this.gradeOverride??blendPhases(this.grades,night,sunset);
+  this.colorGrade.set(g);this.renderer.toneMappingExposure=Math.pow(2,g.exposure);
+ }
+ /** Bump after editing `grades` in place so the next frame re-applies them. */
+ gradeRevision=0;
  setStreetLights(positions:T.Vector3[],night:number){this.streetLights.forEach((light,i)=>{light.intensity=positions[i]?night*2.4:0;if(positions[i])light.position.copy(positions[i]);});}
  render(camera:T.PerspectiveCamera){this.mountains.setView(camera);if(this.composer)this.composer.render();else this.renderer.render(this.scene,camera);}
  /** Native-resolution painted look, so zoomed-out detail stays sharp. The buffer is capped at 2560x1440 on desktop

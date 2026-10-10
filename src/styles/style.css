@@ -64,3 +64,5 @@ body.color-editing #pause-menu{background:transparent;pointer-events:none}body.c
 
 /* Day-phase switch in the graphics settings. */
 .time-picker{display:grid;gap:8px}.time-presets{display:flex;flex-wrap:wrap;justify-content:center;gap:4px}.time-presets button{font:12px PixelCJK,'Microsoft YaHei',sans-serif;padding:6px 8px;min-height:36px;border:1px solid #8ba58955}.time-presets button[aria-pressed="true"]{border-color:#ffdfa1;text-shadow:0 0 8px #ffffff80}
+/* Colour lab: time-of-day tabs. */
+.phase-tabs{display:flex;gap:4px;margin:10px 0 6px}.phase-tabs button{flex:1;font-size:13px;padding:6px 4px;min-height:36px;border:1px solid #8ba58955}.phase-tabs button[aria-selected="true"]{border-color:#ffdfa1;background:#2a5a4ecc;text-shadow:0 0 8px #ffffff80}#color-time{margin:6px 0}#color-time .time-presets{display:none}#color-settings{margin-top:6px}
