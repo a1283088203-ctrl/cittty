@@ -31,7 +31,7 @@ jobs:
       - run: npm ci
 
       - name: Build game
-        run: npm run build -- --base=/CITY/
+        run: npm run build -- --base=/cittty/
 
       - uses: actions/configure-pages@v5
 
