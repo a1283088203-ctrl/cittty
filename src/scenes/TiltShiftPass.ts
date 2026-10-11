@@ -1,5 +1,6 @@
 import * as T from 'three';
 import {Pass,FullScreenQuad} from 'three/addons/postprocessing/Pass.js';
+import {MOBILE} from '../utils/quality';
 
 /* Miniature ("tilt-shift") depth of field. The camera focuses on the ground point at the centre of the view, so
  * the city there stays sharp while nearer and farther things blur with their distance from that focus, plus a soft
@@ -11,7 +12,7 @@ import {Pass,FullScreenQuad} from 'three/addons/postprocessing/Pass.js';
 
 const VERT='varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}';
 const FRAG=`uniform sampler2D tDiffuse,tDepth,tBrush;uniform vec2 texel,brushScale;uniform float near,far,focus,maxRadius,band,depthRange,saturation;uniform bool finalPass;varying vec2 vUv;
- const int N=8;
+ const int N=${MOBILE?4:8};
  // The first pass works out the blur amount from depth and stores it in alpha; the second pass reads it back from
  // there, so it never samples the depth texture attached to the framebuffer it draws into (a WebGL feedback loop).
  float coc(vec2 uv){

@@ -6,6 +6,7 @@ import {ColorGradePass,blendPhases,type Grade,type PhaseGrades} from './ColorGra
 import {PaintPass} from './PaintPass';
 import {TiltShiftPass} from './TiltShiftPass';
 import {installPaintChunks} from '../utils/paint';
+import {MOBILE} from '../utils/quality';
 import * as T from 'three';
 import {box} from '../utils/mesh';
 import {STAGES} from '../data/progression';
@@ -23,7 +24,7 @@ export class CityScene{
  colorGrade?:ColorGradePass;paint?:PaintPass;tiltShift?:TiltShiftPass;composer?:EffectComposer;bloom?:UnrealBloomPass;crt?:ShaderPass;bloomScale=1;private bloomStage=0;private streetLights=[new T.PointLight(0xffd7a1,0,4,2),new T.PointLight(0xffd7a1,0,4,2)];
  /** Warm night spill from lit buildings: a fixed pool (so shaders never recompile) parked at the doors of the
   * buildings nearest the view centre. */
- static BUILDING_LIGHTS=8;private buildingLights=Array.from({length:CityScene.BUILDING_LIGHTS},()=>new T.PointLight(0xffc98a,0,3.6,1.6));private lightSpot=new T.Vector3();
+ static BUILDING_LIGHTS=MOBILE?3:8;private buildingLights=Array.from({length:CityScene.BUILDING_LIGHTS},()=>new T.PointLight(0xffc98a,0,3.6,1.6));private lightSpot=new T.Vector3();
  constructor(parent:HTMLElement){
   // Smooth painted fog (bayer4 stays defined: the scenery fog hooks still call it, now as a no-op offset).
   T.ShaderChunk.fog_pars_fragment=`#ifdef USE_FOG\nuniform vec3 fogColor;varying float vFogDepth;\n#ifdef FOG_EXP2\nuniform float fogDensity;\n#else\nuniform float fogNear;uniform float fogFar;\n#endif\nfloat bayer4(vec2 a){return .5;}\n#endif`;
@@ -45,7 +46,7 @@ export class CityScene{
   this.renderer=new T.WebGLRenderer({antialias:true,powerPreference:'high-performance'});this.renderer.setPixelRatio(this.pixelScale(innerWidth,innerHeight));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=T.PCFShadowMap;this.renderer.setClearColor(0xc9deda);parent.append(this.renderer.domElement);
  this.scene.fog=new T.Fog(0xc9deda,70,160);this.scene.add(this.ambient,this.sun);this.sun.position.set(-15,30,18);this.sun.castShadow=true;// The shadow area covers the whole scenery ring (±52), not just the city, so background hills, mountains and trees
  // get light and shade too. A larger map keeps the city's shadows about as sharp as before.
- const shadowSize=matchMedia('(pointer: coarse)').matches?2048:4096;this.sun.shadow.mapSize.set(shadowSize,shadowSize);Object.assign(this.sun.shadow.camera,{left:-52,right:52,top:52,bottom:-52,near:1,far:220});this.sun.shadow.bias=-.0004;this.sun.shadow.normalBias=.04;
+ const shadowSize=MOBILE?1024:4096;this.sun.shadow.mapSize.set(shadowSize,shadowSize);Object.assign(this.sun.shadow.camera,{left:-52,right:52,top:52,bottom:-52,near:1,far:220});this.sun.shadow.bias=-.0004;this.sun.shadow.normalBias=.04;
  box(this.scene,24,1,24,0,-.85,0,0x9a9870);box(this.scene,24.6,.4,24.6,0,-1.2,0,0x557f78);box(this.scene,25,.18,25,0,-1.48,0,0x789a87);
  for(const s of [-1,1]){box(this.scene,24.5,.3,.25,0,.05,s*12.2,0xe3d7b8);box(this.scene,.25,.3,24.5,s*12.2,.05,0,0xe3d7b8);}
  this.skyGradient=new SkyGradient(this.scene);this.mountains=new MountainRing(this.scene);this.setStage(0);
@@ -113,8 +114,9 @@ export class CityScene{
  render(camera:T.PerspectiveCamera){this.mountains.setView(camera);if(this.composer)this.composer.render();else this.renderer.render(this.scene,camera);}
  /** Native-resolution painted look, so zoomed-out detail stays sharp. The buffer is capped at 2560x1440 on desktop
   * and 1920x1080 on phones; brush size scales with it (PaintPass.setSize), so strokes look the same. */
- private pixelScale(w:number,h:number){const coarse=matchMedia('(pointer: coarse)').matches;
-  return Math.min(devicePixelRatio,2,(coarse?1920:2560)/Math.max(w,h),(coarse?1080:1440)/Math.min(w,h));}
+ // Phones render at most 1280x720: the paint and blur passes cost per pixel, and high-DPI phones otherwise stall.
+ private pixelScale(w:number,h:number){
+  return Math.min(devicePixelRatio,MOBILE?1.5:2,(MOBILE?1280:2560)/Math.max(w,h),(MOBILE?720:1440)/Math.min(w,h));}
  setCrt(on:boolean){if(this.crt)this.crt.enabled=on;}
  resize(w:number,h:number){const scale=this.pixelScale(w,h);this.renderer.setPixelRatio(scale);this.renderer.setSize(w,h);if(this.composer){this.composer.setPixelRatio(scale);this.composer.setSize(w,h);}if(this.crt)(this.crt.uniforms.resolution.value as T.Vector2).set(w*scale,h*scale);}
 }
