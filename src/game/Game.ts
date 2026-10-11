@@ -54,6 +54,15 @@ export class Game{
  let bloomPct=100;try{bloomPct=Math.min(160,Math.max(0,Number(localStorage.getItem('stack-city-bloom'))||100));}catch{}
  bloomSlider.value=String(bloomPct);bloomValue.textContent=`${bloomPct}%`;this.city.bloomScale=bloomPct/100;
  bloomSlider.addEventListener('input',()=>{const v=Number(bloomSlider.value);bloomValue.textContent=`${v}%`;this.city.bloomScale=v/100;try{localStorage.setItem('stack-city-bloom',String(v));}catch{}});
+ // Building outline thickness (pixels at 1080p, 0 = off). Saved on this device.
+ const outlineRow=document.createElement('label');outlineRow.className='bloom-row';outlineRow.htmlFor='outline';
+ outlineRow.innerHTML='描边 <input type="range" id="outline" min="0" max="4" step="0.25" value="1"><b id="outline-value"></b>';
+ bloomSlider.closest('label')!.after(outlineRow);
+ const outlineSlider=outlineRow.querySelector('input')!,outlineValue=outlineRow.querySelector('b')!;
+ let outlinePx=1;try{const saved=localStorage.getItem('stack-city-outline');if(saved!==null&&Number.isFinite(Number(saved)))outlinePx=Math.min(4,Math.max(0,Number(saved)));}catch{}
+ const applyOutline=(v:number)=>{outlineValue.textContent=v===0?'关':`${v}px`;this.city.paint?.setOutlineWidth(v);};
+ outlineSlider.value=String(outlinePx);applyOutline(outlinePx);
+ outlineSlider.addEventListener('input',()=>{const v=Number(outlineSlider.value);applyOutline(v);try{localStorage.setItem('stack-city-outline',String(v));}catch{}});
  // Stroke boil: the painted strokes re-draw a few times a second. Saved on this device.
  const boilButton=document.createElement('button');boilButton.id='boil';document.getElementById('crt')!.after(boilButton);
  try{boil.enabled=localStorage.getItem('stack-city-boil')!=='off';}catch{}

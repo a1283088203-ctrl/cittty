@@ -26,7 +26,7 @@ const BLUR=`uniform sampler2D tDiffuse;uniform vec2 texel,dir;varying vec2 vUv;
   for(int i=-4;i<=4;i++){float g=exp(-float(i*i)/8.);c+=texture2D(tDiffuse,vUv+dir*float(i)*texel)*g;w+=g;}
   gl_FragColor=c/w;}`;
 
-const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uniform float radius,near,far,refDepth,minScale,maxScale,grainScale,outlineStrength;uniform vec4 jitter;uniform vec3 envTint;varying vec2 vUv;
+const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uniform float radius,near,far,refDepth,minScale,maxScale,grainScale,outlineStrength,outlineWidth;uniform vec4 jitter;uniform vec3 envTint;varying vec2 vUv;
  float linZ(vec2 uv){float d=texture2D(tDepth,uv).r;return near*far/(far-d*(far-near));}
  // Buildings carry alpha .5 (walls, roofs) or .25 (lit windows); everything else is 1 or .75.
  float tagged(float a){return step(a,.6);}
@@ -35,7 +35,9 @@ const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uni
   * tinted by the ambient light, never black, so it shifts with day, dusk and night. */
  vec3 outline(vec3 c,vec4 base,float z){
   if(tagged(base.a)<.5)return c;
-  vec2 dx=vec2(texel.x,0.),dy=vec2(0.,texel.y);
+  if(outlineWidth<.05)return c;
+  // Sample the neighbours outlineWidth pixels away: wider spacing = thicker line on the building side.
+  vec2 dx=vec2(texel.x*outlineWidth,0.),dy=vec2(0.,texel.y*outlineWidth);
   float l=linZ(vUv-dx),r=linZ(vUv+dx),b=linZ(vUv-dy),t=linZ(vUv+dy);
   float other=4.-tagged(texture2D(tDiffuse,vUv-dx).a)-tagged(texture2D(tDiffuse,vUv+dx).a)-tagged(texture2D(tDiffuse,vUv-dy).a)-tagged(texture2D(tDiffuse,vUv+dy).a);
   float jump=max(max(l,r),max(b,t))-z;
@@ -130,11 +132,15 @@ export class PaintPass extends Pass{
   (this.paint.uniforms.envTint.value as T.Color).setRGB(c.r/l,c.g/l,c.b/l);
  }
  // refDepth: view distance (world units) at which strokes reach full size; nearer stays full, farther shrinks.
- private paint=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},tTensor:{value:null},tDepth:{value:null},texel:{value:new T.Vector2()},radius:{value:6},near:{value:.1},far:{value:220},refDepth:{value:24},minScale:{value:PaintPass.MIN},maxScale:{value:PaintPass.MAX},grainScale:{value:1},jitter:{value:new T.Vector4()},envTint:{value:new T.Color(1,1,1)},outlineStrength:{value:PaintPass.OUTLINE}},vertexShader:VERT,fragmentShader:KUWAHARA,depthTest:false,depthWrite:false});
+ private paint=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},tTensor:{value:null},tDepth:{value:null},texel:{value:new T.Vector2()},radius:{value:6},near:{value:.1},far:{value:220},refDepth:{value:24},minScale:{value:PaintPass.MIN},maxScale:{value:PaintPass.MAX},grainScale:{value:1},jitter:{value:new T.Vector4()},envTint:{value:new T.Color(1,1,1)},outlineStrength:{value:PaintPass.OUTLINE},outlineWidth:{value:1}},vertexShader:VERT,fragmentShader:KUWAHARA,depthTest:false,depthWrite:false});
  private quad=new FullScreenQuad();
  depth:T.DepthTexture|null=null;
  constructor(private camera:T.PerspectiveCamera){super();}
+ /** Outline thickness in pixels at 1080p (0 = off); scaled to the render height so it looks the same everywhere. */
+ outlineWidth=1;private renderHeight=1080;
+ setOutlineWidth(px:number){this.outlineWidth=px;this.paint.uniforms.outlineWidth.value=px*this.renderHeight/1080;}
  setSize(width:number,height:number){
+  this.renderHeight=height;this.setOutlineWidth(this.outlineWidth);
   this.tensorA.setSize(width,height);this.tensorB.setSize(width,height);
   for(const m of [this.tensor,this.blur,this.paint])m.uniforms.texel.value.set(1/width,1/height);
   // Brush and grain are relative to the screen height, with no pixel caps, so a phone and a large monitor look the same.
