@@ -56,10 +56,12 @@ export function setVegetationWind(time:number,strength:number,direction:T.Vector
 
 /** One cube clump: main mass, dusky underside, a leafy notch on top and darker leaf specks.
  * Every clump of a tree shares one tone, so a tree reads as either a light or a dark tree. */
-function clump(v:Voxels,r:()=>number,x:number,y:number,z:number,s:number,lit:boolean){
+function clump(v:Voxels,r:()=>number,x:number,y:number,z:number,s:number,lit:boolean,simple=false){
  const hex=(lit?LIGHT:TEAL)[Math.floor(r()*3)],w=s*(.92+r()*.16),h=s*(.82+r()*.16),d=s*(.92+r()*.16);
  v.box(w,h,d,x,y,z,hex);
  v.box(w*.94,h*.16,d*.94,x,y-h*.5-h*.05,z,DEEP);
+ // Distant scenery: the notch and leaf specks are too small to see through the haze, so they are skipped.
+ if(simple)return;
  v.box(w*(.3+r()*.2),h*.12,d*(.3+r()*.2),x+(r()-.5)*w*.4,y+h*.55,z+(r()-.5)*d*.4,hex);
  const speck=darker(hex,lit?.84:.78);
  for(let i=0;i<3;i++){
@@ -84,19 +86,21 @@ function limb(v:Voxels,x0:number,y0:number,z0:number,x1:number,y1:number,z1:numb
 }
 
 /** Low shrub mounds in a single tone (light or dark), with a small cap and the odd blossom. */
-function shrubs(v:Voxels,r:()=>number,count:number,spread:number,avoid:number,lit:boolean){
+function shrubs(v:Voxels,r:()=>number,count:number,spread:number,avoid:number,lit:boolean,simple=false){
  for(let i=0;i<count;i++){
   let px=0,pz=0;
   for(let tries=0;tries<6;tries++){px=(r()*2-1)*spread;pz=(r()*2-1)*spread;if(Math.hypot(px,pz)>=avoid)break;}
   const w=.26+r()*.2,h=.18+r()*.12,hex=(lit?LIGHT:TEAL)[Math.floor(r()*3)];
   v.box(w,h,w*.9,px,h/2,pz,hex);
+  if(simple)continue;
   v.box(w*.62,h*.34,w*.56,px-w*.12,h+h*.1,pz+w*.1,hex);
   if(r()<.3)v.box(.06,.06,.06,px+(r()-.5)*w*.6,h*.85,pz+w*.46,BLOSSOM[Math.floor(r()*3)]);
  }
 }
 
-/** Stable per-cell tree in local space (origin at the cell centre), optionally with undergrowth. */
-export function treeGeometry(seed:number,undergrowth=0){
+/** Stable per-cell tree in local space (origin at the cell centre), optionally with undergrowth.
+ * `simple` drops the tiny detail boxes for far scenery (about half the triangles, same silhouette). */
+export function treeGeometry(seed:number,undergrowth=0,simple=false){
  const r=seeded(seed),roll=r(),k=.86+r()*.18,form=roll<.45?0:roll<.72?1:2;
  // Two kinds of tree: light yellow-green or dark teal, never mixed within one tree.
  const lit=r()<.5;
@@ -106,13 +110,13 @@ export function treeGeometry(seed:number,undergrowth=0){
   // Broad crown: a row of three clumps under two larger ones.
   trunk(v,r,height+.3*k,.12*k);
   const y1=height+.3*k,y2=height+.76*k;
-  for(const [x,z] of [[-.36,.08],[.02,-.16],[.38,.1]] as const)clump(v,r,x*k,y1,z*k,.48*k,lit);
-  for(const [x,z,dy] of [[-.2,-.04,0],[.22,.06,.04]] as const)clump(v,r,x*k,y2+dy*k,z*k,.56*k,lit);
+  for(const [x,z] of [[-.36,.08],[.02,-.16],[.38,.1]] as const)clump(v,r,x*k,y1,z*k,.48*k,lit,simple);
+  for(const [x,z,dy] of [[-.2,-.04,0],[.22,.06,.04]] as const)clump(v,r,x*k,y2+dy*k,z*k,.56*k,lit,simple);
  }else if(form===1){
   // Tall column of stacked clumps, narrowing towards the top.
   trunk(v,r,height+.3*k,.11*k);
   const n=3+Math.floor(r()*2);
-  for(let i=0;i<n;i++){const side=i%2?.07:-.07;clump(v,r,side*k,height+.3*k+i*.36*k,-side*k,(.62-i*.06)*k,lit);}
+  for(let i=0;i<n;i++){const side=i%2?.07:-.07;clump(v,r,side*k,height+.3*k+i*.36*k,-side*k,(.62-i*.06)*k,lit,simple);}
  }else{
   // Branching tree: a tall thin trunk forks into two limbs carrying clumps around a top crown.
   trunk(v,r,height,.1*k);
@@ -120,15 +124,15 @@ export function treeGeometry(seed:number,undergrowth=0){
   for(const sign of [1,-1]){
    const x=Math.cos(angle)*.34*k*sign,z=Math.sin(angle)*.34*k*sign,y=height+(sign>0?.28:.12)*k;
    limb(v,0,fork,0,x,y,z,.07*k);
-   clump(v,r,x,y+.16*k,z,.46*k,lit);
+   clump(v,r,x,y+.16*k,z,.46*k,lit,simple);
   }
-  clump(v,r,0,height+.52*k,0,.5*k,lit);
+  clump(v,r,0,height+.52*k,0,.5*k,lit,simple);
  }
- if(undergrowth)shrubs(v,r,undergrowth,.55,.24,lit);
+ if(undergrowth)shrubs(v,r,undergrowth,.55,.24,lit,simple);
  return v.build();
 }
 
 /** A free-standing shrub patch in local space; it stays still in the wind. */
-export function shrubGeometry(seed:number,count:number){
- const r=seeded(seed),v=new Voxels(99,0);shrubs(v,r,count,.5,0,r()<.5);return v.build();
+export function shrubGeometry(seed:number,count:number,simple=false){
+ const r=seeded(seed),v=new Voxels(99,0);shrubs(v,r,count,.5,0,r()<.5,simple);return v.build();
 }

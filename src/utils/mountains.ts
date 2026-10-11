@@ -58,8 +58,10 @@ export function mountainCell(add:Add,plant:Plant,x:number,z:number,bottom:number
  if(snow){
   // Overhanging snow slab with a few drips down the sides.
   const cap=add(size+.04,.14,size+.04,x,top-.05,z,SNOW);groundTexture(cap,'dirt');
-  for(let i=0,n=Math.round(size*2);i<n;i++){const a=Math.floor(r()*4),u=(r()-.5)*size*.73,len=.15+r()*.3,o=half+.02;
-   a<2?add(.18,len,.04,x+u,top-.12-len/2,z+(a?o:-o),SNOW):add(.04,len,.18,x+(a===2?o:-o),top-.12-len/2,z+u,SNOW);}
+  // One drip per cell (was three): the snow drips alone were ~65k triangles across the range.
+  for(let i=0,n=Math.max(1,Math.round(size*.7));i<n;i++){const a=Math.floor(r()*4),u=(r()-.5)*size*.73,len=.15+r()*.3,o=half+.02;
+   // Drips are too thin to throw a visible shadow; leaving them out of the shadow pass saves thousands of triangles.
+   const drip=a<2?add(.18,len,.04,x+u,top-.12-len/2,z+(a?o:-o),SNOW):add(.04,len,.18,x+(a===2?o:-o),top-.12-len/2,z+u,SNOW);drip.castShadow=false;}
   return;
  }
  // A smaller block stacked off-centre on some big tops, so slopes read as heaps of blocks rather than one grid.
@@ -67,17 +69,18 @@ export function mountainCell(add:Add,plant:Plant,x:number,z:number,bottom:number
  if(!small&&!bare&&r()<.25){
   const s=size*(.38+r()*.2),lh=.25+r()*.3,room=(size-s)/2,lx=x+(r()*2-1)*room,lz=z+(r()*2-1)*room;
   const block=add(s,lh,s,lx,top+lh/2,lz,grass());groundTexture(block,'grass');lump=true;
-  if(r()<.5)plant(shrubGeometry(Math.floor(r()*0x7fffffff),1),lx,top+lh,lz);
+  if(r()<.5)plant(shrubGeometry(Math.floor(r()*0x7fffffff),1,true),lx,top+lh,lz);
  }
  // Soft painted edges: grass mounds overhang the block's rim and hide the hard step corner.
  for(let i=0,n=small?(r()<.5?1:0):Math.round(size*.7+r()*1.2);i<n;i++){const a=Math.floor(r()*4),u=(r()-.5)*size*.73,o=half*.88;
-  plant(shrubGeometry(Math.floor(r()*0x7fffffff),small?1:2),x+(a<2?u:a===2?o:-o),top-.06,z+(a<2?(a?o:-o):u));}
+  plant(shrubGeometry(Math.floor(r()*0x7fffffff),small?1:2,true),x+(a<2?u:a===2?o:-o),top-.06,z+(a<2?(a?o:-o):u));}
  // Big blocks carry more than one feature; small blocks only get shrubs or a rock.
  for(let i=0,n=size>2?2:lump?0:1;i<n;i++){
   const ground=top+(bare?.05:0),k=r(),px=x+(r()-.5)*size*.33,pz=z+(r()-.5)*size*.33,seed=Math.floor(r()*0x7fffffff);
   if(bare){if(k<.5)rock(add,px,ground,pz);continue;}
-  if(k<.38&&!small)plant(treeGeometry(seed,k<.19?1+Math.floor(r()*3):0),px,ground,pz);
-  else if(k<.54)plant(shrubGeometry(seed,small?1:2+Math.floor(r()*3)),px,ground,pz);
+  // Scenery vegetation uses the simplified geometry: same shapes, without the specks too small to see from the city.
+  if(k<.38&&!small)plant(treeGeometry(seed,k<.19?1+Math.floor(r()*3):0,true),px,ground,pz);
+  else if(k<.54)plant(shrubGeometry(seed,small?1:2+Math.floor(r()*3),true),px,ground,pz);
   else if(k<.64&&!small)rock(add,px,ground,pz);
  }
 }
