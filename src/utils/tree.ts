@@ -10,7 +10,8 @@ const UP=unit.getAttribute('position').array,UN=unit.getAttribute('normal').arra
 const color=new T.Color(),matrix=new T.Matrix4(),point=new T.Vector3(),normal=new T.Vector3(),size=new T.Vector3(),spot=new T.Vector3();
 const identity=new T.Quaternion(),UPWARD=new T.Vector3(0,1,0);
 
-const LIGHT=[0xb2d47a,0xa8cc70,0xbcd886],TEAL=[0x6aa596,0x629c90,0x72ad98],DEEP=0x6f6d88;
+// Light trees lean blue-green rather than yellow-green, so they sit closer to the teal ones.
+const LIGHT=[0x9ccb8c,0x92c384,0xa6d398],TEAL=[0x6aa596,0x629c90,0x72ad98],DEEP=0x6f6d88;
 const TRUNK=0x8b6449,TRUNK_DARK=0x5f4535,BLOSSOM=[0xf0d27a,0xe9a7a0,0xf4ecd6];
 const darker=(hex:number,f:number)=>color.setHex(hex).multiplyScalar(f).getHex();
 

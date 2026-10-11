@@ -34,9 +34,8 @@ const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uni
  vec3 paper(vec3 c,vec2 flow){
   // Grain is measured in screen-relative units, so it is the same size on a phone and a 4K monitor.
   // Paper grain and flow strokes removed: the image stays clean, only the soft posterise remains.
-  // Soft posterise in a perceptual-ish space: flat bands of paint without hard banding.
-  vec3 g=sqrt(max(c,0.)),poster=floor(g*14.+.5)/14.;
-  return pow(mix(g,poster,.35),vec3(2.));}
+  // Posterise removed: on large flat areas like the ground it showed up as visible colour steps.
+  return c;}
  void main(){
   vec4 base=texture2D(tDiffuse,vUv);
   vec3 t=texture2D(tTensor,vUv).xyz; // E=fx.fx, G=fy.fy, F=fx.fy
