@@ -1,6 +1,7 @@
 import * as T from 'three';
 import {Pass,FullScreenQuad} from 'three/addons/postprocessing/Pass.js';
 import {MOBILE} from '../utils/quality';
+import {boilFrame} from '../utils/boil';
 
 /* Painterly post-process (anisotropic Kuwahara, after Kyprianidis et al. and Maxime Heckel's
  * "On Crafting Painterly Shaders"):
@@ -25,7 +26,7 @@ const BLUR=`uniform sampler2D tDiffuse;uniform vec2 texel,dir;varying vec2 vUv;
   for(int i=-4;i<=4;i++){float g=exp(-float(i*i)/8.);c+=texture2D(tDiffuse,vUv+dir*float(i)*texel)*g;w+=g;}
   gl_FragColor=c/w;}`;
 
-const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uniform float radius,near,far,refDepth,minScale,maxScale,grainScale;varying vec2 vUv;
+const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uniform float radius,near,far,refDepth,minScale,maxScale,grainScale;uniform vec4 jitter;varying vec2 vUv;
  // Fixed sample grid (13x13, 7x7 on phones) stretched over the brush, so cost and look do not depend on screen resolution.
  const int N=${MOBILE?3:5};
  float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
@@ -52,6 +53,11 @@ const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uni
   float rad=radius*clamp(sqrt(refDepth/viewZ),minScale,maxScale);
   float A=l1+l2>1e-6?(l1-l2)/(l1+l2):0.;
   float a=rad*clamp((1.+A),.1,2.),b=rad*clamp(1./(1.+A),.1,2.);
+  // Boil: each animation frame turns the strokes a little and changes their length, with the amount varying across the
+  // screen, so the paint visibly re-draws itself instead of sitting still.
+  float wob=sin(dot(vUv,vec2(37.1,23.7))+jitter.z*30.)*.5+jitter.x;
+  float ang=wob*.5;d=mat2(cos(ang),sin(ang),-sin(ang),cos(ang))*d;
+  a*=1.+jitter.y*.35;b*=1.-jitter.y*.2;
   float cp=d.x,sp=d.y;
   mat2 SR=mat2(.5/a,0.,0.,.5/b)*mat2(cp,-sp,sp,cp);
   float stepPx=max(a,b)/float(N);
@@ -94,7 +100,7 @@ export class PaintPass extends Pass{
   * that: strokes never get smaller than MIN or larger than MAX, whatever the screen size or zoom. */
  static BRUSH=.0075;static MIN=.6;static MAX=1;
  // refDepth: view distance (world units) at which strokes reach full size; nearer stays full, farther shrinks.
- private paint=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},tTensor:{value:null},tDepth:{value:null},texel:{value:new T.Vector2()},radius:{value:6},near:{value:.1},far:{value:220},refDepth:{value:24},minScale:{value:PaintPass.MIN},maxScale:{value:PaintPass.MAX},grainScale:{value:1}},vertexShader:VERT,fragmentShader:KUWAHARA,depthTest:false,depthWrite:false});
+ private paint=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},tTensor:{value:null},tDepth:{value:null},texel:{value:new T.Vector2()},radius:{value:6},near:{value:.1},far:{value:220},refDepth:{value:24},minScale:{value:PaintPass.MIN},maxScale:{value:PaintPass.MAX},grainScale:{value:1},jitter:{value:new T.Vector4()}},vertexShader:VERT,fragmentShader:KUWAHARA,depthTest:false,depthWrite:false});
  private quad=new FullScreenQuad();
  depth:T.DepthTexture|null=null;
  constructor(private camera:T.PerspectiveCamera){super();}
@@ -112,6 +118,7 @@ export class PaintPass extends Pass{
   this.blur.uniforms.tDiffuse.value=this.tensorB.texture;this.blur.uniforms.dir.value.set(0,1);run(this.blur,this.tensorA);
   // The scene depth only lives on this frame's RenderPass target; later passes (tilt-shift) read it from here.
   this.depth=readBuffer.depthTexture;
+  (this.paint.uniforms.jitter.value as T.Vector4).fromArray(boilFrame());
   this.paint.uniforms.near.value=this.camera.near;this.paint.uniforms.far.value=this.camera.far;
   this.paint.uniforms.tDiffuse.value=readBuffer.texture;this.paint.uniforms.tTensor.value=this.tensorA.texture;this.paint.uniforms.tDepth.value=readBuffer.depthTexture;
   run(this.paint,this.renderToScreen?null:writeBuffer);

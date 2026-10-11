@@ -26,6 +26,7 @@ import {TouchInputSystem} from '../systems/TouchInputSystem';
 import {ForegroundClouds} from '../systems/ForegroundClouds';
 import {mountTimePickers} from '../systems/TimePicker';
 import {ColorPanel} from '../systems/ColorPanel';
+import {boil} from '../utils/boil';
 import {buildingModel} from '../entities/Building';
 import {randomBuildingVariant} from '../entities/BuildingDecorations';
 import {buildingData,MAX_LEVEL} from '../data/buildings';
@@ -53,6 +54,11 @@ export class Game{
  let bloomPct=100;try{bloomPct=Math.min(160,Math.max(0,Number(localStorage.getItem('stack-city-bloom'))||100));}catch{}
  bloomSlider.value=String(bloomPct);bloomValue.textContent=`${bloomPct}%`;this.city.bloomScale=bloomPct/100;
  bloomSlider.addEventListener('input',()=>{const v=Number(bloomSlider.value);bloomValue.textContent=`${v}%`;this.city.bloomScale=v/100;try{localStorage.setItem('stack-city-bloom',String(v));}catch{}});
+ // Stroke boil: the painted strokes re-draw a few times a second. Saved on this device.
+ const boilButton=document.createElement('button');boilButton.id='boil';document.getElementById('crt')!.after(boilButton);
+ try{boil.enabled=localStorage.getItem('stack-city-boil')!=='off';}catch{}
+ const boilLabel=()=>{boilButton.textContent=boil.enabled?'≈ 笔触抖动 开':'≈ 笔触抖动 关';boilButton.setAttribute('aria-pressed',String(boil.enabled));};boilLabel();
+ boilButton.addEventListener('click',()=>{boil.enabled=!boil.enabled;try{localStorage.setItem('stack-city-boil',boil.enabled?'on':'off');}catch{}boilLabel();});
  // Day-phase switch in the graphics settings (auto / dawn / day / dusk / night + hour slider); lighting re-applies at
  // once, even while paused.
  // Colour lab (one grade per time of day, live over the game); its own copy of the time switch sits inside it.

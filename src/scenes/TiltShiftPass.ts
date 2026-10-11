@@ -1,6 +1,7 @@
 import * as T from 'three';
 import {Pass,FullScreenQuad} from 'three/addons/postprocessing/Pass.js';
 import {MOBILE} from '../utils/quality';
+import {boilFrame} from '../utils/boil';
 
 /* Miniature ("tilt-shift") depth of field. The camera focuses on the ground point at the centre of the view, so
  * the city there stays sharp while nearer and farther things blur with their distance from that focus, plus a soft
@@ -11,7 +12,7 @@ import {MOBILE} from '../utils/quality';
  * left out, so in-focus buildings do not smear a halo into the blurred background behind them. */
 
 const VERT='varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}';
-const FRAG=`uniform sampler2D tDiffuse,tDepth,tBrush;uniform vec2 texel,brushScale;uniform float near,far,focus,maxRadius,band,depthRange,saturation;uniform bool finalPass;varying vec2 vUv;
+const FRAG=`uniform sampler2D tDiffuse,tDepth,tBrush;uniform vec2 texel,brushScale;uniform vec4 jitter;uniform float near,far,focus,maxRadius,band,depthRange,saturation;uniform bool finalPass;varying vec2 vUv;
  const int N=${MOBILE?4:8};
  // The first pass works out the blur amount from depth and stores it in alpha; the second pass reads it back from
  // there, so it never samples the depth texture attached to the framebuffer it draws into (a WebGL feedback loop).
@@ -33,7 +34,8 @@ const FRAG=`uniform sampler2D tDiffuse,tDepth,tBrush;uniform vec2 texel,brushSca
   vec3 col=base.rgb;
   // Brush mask: RG stroke direction, B bristles, A stroke coverage. The first pass smears along the stroke, the
   // second only a little across it, so the blur reads as dabs of a flat brush instead of an even lens blur.
-  vec4 brush=texture2D(tBrush,vUv*brushScale);
+  // Boil: every animation frame slides the stroke mask to a new random spot, so the smears re-draw in place.
+  vec4 brush=texture2D(tBrush,vUv*brushScale+jitter.xy*.6+jitter.zw*.2);
   vec2 sd=brush.rg*2.-1.;sd=dot(sd,sd)>.01?normalize(sd):vec2(.94,-.34);
   vec2 dir=finalPass?vec2(-sd.y,sd.x):sd;
   float cover=smoothstep(.15,.85,brush.a);
@@ -66,7 +68,7 @@ export class TiltShiftPass extends Pass{
  /** Height of one brush-mask tile as a fraction of the screen height. */
  static BRUSH_TILE=.6;
  private brush=TiltShiftPass.loadBrush();
- private material=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},tDepth:{value:null},tBrush:{value:this.brush},texel:{value:new T.Vector2()},brushScale:{value:new T.Vector2(1,1)},
+ private material=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},tDepth:{value:null},tBrush:{value:this.brush},texel:{value:new T.Vector2()},brushScale:{value:new T.Vector2(1,1)},jitter:{value:new T.Vector4()},
   near:{value:.1},far:{value:220},focus:{value:40},maxRadius:{value:10},band:{value:TiltShiftPass.BAND},depthRange:{value:TiltShiftPass.DEPTH_RANGE},
   saturation:{value:TiltShiftPass.SATURATION},finalPass:{value:false}},vertexShader:VERT,fragmentShader:FRAG,depthTest:false,depthWrite:false});
  private quad=new FullScreenQuad(this.material);
@@ -99,6 +101,7 @@ export class TiltShiftPass extends Pass{
   const depth=this.depth(),u=this.material.uniforms;
   if(!depth)return;
   u.tDepth.value=depth;u.near.value=this.camera.near;u.far.value=this.camera.far;u.focus.value=this.focusDistance();
+  (u.jitter.value as T.Vector4).fromArray(boilFrame());
   u.tDiffuse.value=readBuffer.texture;u.finalPass.value=false;
   renderer.setRenderTarget(this.temp);this.quad.render(renderer);
   // Unbind the depth texture: the second pass may draw into the target that owns it.
