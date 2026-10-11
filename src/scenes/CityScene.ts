@@ -24,7 +24,7 @@ export class CityScene{
  colorGrade?:ColorGradePass;paint?:PaintPass;tiltShift?:TiltShiftPass;composer?:EffectComposer;bloom?:UnrealBloomPass;crt?:ShaderPass;bloomScale=1;private bloomStage=0;private streetLights=[new T.PointLight(0xffd7a1,0,4,2),new T.PointLight(0xffd7a1,0,4,2)];
  /** Warm night spill from lit buildings: a fixed pool (so shaders never recompile) parked at the doors of the
   * buildings nearest the view centre. */
- static BUILDING_LIGHTS=MOBILE?3:8;private buildingLights=Array.from({length:CityScene.BUILDING_LIGHTS},()=>new T.PointLight(0xffc98a,0,3.6,1.6));private lightSpot=new T.Vector3();
+ static BUILDING_LIGHTS=8;private buildingLights=Array.from({length:CityScene.BUILDING_LIGHTS},()=>new T.PointLight(0xffc98a,0,3.6,1.6));private lightSpot=new T.Vector3();
  constructor(parent:HTMLElement){
   // Smooth painted fog (bayer4 stays defined: the scenery fog hooks still call it, now as a no-op offset).
   T.ShaderChunk.fog_pars_fragment=`#ifdef USE_FOG\nuniform vec3 fogColor;varying float vFogDepth;\n#ifdef FOG_EXP2\nuniform float fogDensity;\n#else\nuniform float fogNear;uniform float fogFar;\n#endif\nfloat bayer4(vec2 a){return .5;}\n#endif`;
@@ -43,10 +43,11 @@ export class CityScene{
 	float paintWarm = smoothstep( 0., .3, ( directLight.color.r - directLight.color.b ) / max( max( directLight.color.r, directLight.color.b ), 1e-4 ) );
 	vec3 paintShade = mix( directLight.color * .24, vec3( .15, .24, .50 ) * ${lum}, paintWarm );
 	if ( paintSun > .5 ) irradiance = mix( paintShade, directLight.color, dotNL * paintLit );`).replace('varying vec3 vViewPosition;','varying vec3 vViewPosition;\nfloat paintSun = 0.0; float paintLit = 1.0;');
-  this.renderer=new T.WebGLRenderer({antialias:true,powerPreference:'high-performance'});this.renderer.setPixelRatio(this.pixelScale(innerWidth,innerHeight));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=T.PCFShadowMap;this.renderer.setClearColor(0xc9deda);parent.append(this.renderer.domElement);
+  // The composer draws into its own targets, so canvas MSAA only costs phones memory and bandwidth.
+  this.renderer=new T.WebGLRenderer({antialias:!MOBILE,powerPreference:'high-performance'});this.renderer.setPixelRatio(this.pixelScale(innerWidth,innerHeight));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=T.PCFShadowMap;this.renderer.setClearColor(0xc9deda);parent.append(this.renderer.domElement);
  this.scene.fog=new T.Fog(0xc9deda,70,160);this.scene.add(this.ambient,this.sun);this.sun.position.set(-15,30,18);this.sun.castShadow=true;// The shadow area covers the whole scenery ring (±52), not just the city, so background hills, mountains and trees
  // get light and shade too. A larger map keeps the city's shadows about as sharp as before.
- const shadowSize=MOBILE?1024:4096;this.sun.shadow.mapSize.set(shadowSize,shadowSize);Object.assign(this.sun.shadow.camera,{left:-52,right:52,top:52,bottom:-52,near:1,far:220});this.sun.shadow.bias=-.0004;this.sun.shadow.normalBias=.04;
+ const shadowSize=MOBILE?2048:4096;this.sun.shadow.mapSize.set(shadowSize,shadowSize);Object.assign(this.sun.shadow.camera,{left:-52,right:52,top:52,bottom:-52,near:1,far:220});this.sun.shadow.bias=-.0004;this.sun.shadow.normalBias=.04;
  box(this.scene,24,1,24,0,-.85,0,0x9a9870);box(this.scene,24.6,.4,24.6,0,-1.2,0,0x557f78);box(this.scene,25,.18,25,0,-1.48,0,0x789a87);
  for(const s of [-1,1]){box(this.scene,24.5,.3,.25,0,.05,s*12.2,0xe3d7b8);box(this.scene,.25,.3,24.5,s*12.2,.05,0,0xe3d7b8);}
  this.skyGradient=new SkyGradient(this.scene);this.mountains=new MountainRing(this.scene);this.setStage(0);
