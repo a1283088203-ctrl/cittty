@@ -18,7 +18,8 @@ const FRAG=`uniform sampler2D tDiffuse,tDepth,tBrush;uniform vec2 texel,brushSca
  // there, so it never samples the depth texture attached to the framebuffer it draws into (a WebGL feedback loop).
  float coc(vec2 uv){
   float result=0.;
-  if(finalPass)result=texture2D(tDiffuse,uv).a;
+  // The sign of the stored alpha flags sky pixels (see main), so the magnitude is the blur amount.
+  if(finalPass)result=abs(texture2D(tDiffuse,uv).a);
   else{
    // Background only: things nearer than the focus point and the bottom of the screen stay sharp.
    float d=texture2D(tDepth,uv).r,z=near*far/(far-d*(far-near));
@@ -38,11 +39,15 @@ const FRAG=`uniform sampler2D tDiffuse,tDepth,tBrush;uniform vec2 texel,brushSca
   vec4 brush=texture2D(tBrush,vUv*brushScale+jitter.xy*.6+jitter.zw*.2);
   vec2 sd=brush.rg*2.-1.;sd=dot(sd,sd)>.01?normalize(sd):vec2(.94,-.34);
   vec2 dir=finalPass?vec2(-sd.y,sd.x):sd;
-  float cover=smoothstep(.15,.85,brush.a);
+  // The sky gets a plain soft blur: brush streaks and bristle tone on a smooth gradient read as dirty marks.
+  float sky=finalPass?step(base.a,-.5):step(.99999,texture2D(tDepth,vUv).r);
+  float cover=smoothstep(.15,.85,brush.a)*(1.-sky);
   // Along: long where a stroke covers, shorter in the gaps between strokes. Across: short, so stroke edges survive.
   r*=finalPass?.22+.12*cover:.45+1.25*cover;
+  // Sky: an even horizontal-then-vertical blur instead of brush-directed smears.
+  if(sky>.5){dir=finalPass?vec2(0.,1.):vec2(1.,0.);r=c0*maxRadius*.8;}
   // Bristles drag the paint sideways, giving each stroke streaky edges.
-  vec2 drag=vec2(-dir.y,dir.x)*(brush.b-.5)*c0*maxRadius*.7*texel;
+  vec2 drag=vec2(-dir.y,dir.x)*(brush.b-.5)*c0*maxRadius*.7*texel*(1.-sky);
   if(r>.5){
    vec3 sum=vec3(0.);float wsum=0.;
    for(int i=-N;i<=N;i++){
@@ -57,7 +62,7 @@ const FRAG=`uniform sampler2D tDiffuse,tDepth,tBrush;uniform vec2 texel,brushSca
    // Faint bristle tone inside the smeared areas only; the in-focus city stays clean.
    col*=1.+(brush.b-.5)*.16*c0*cover;
    float l=dot(col,vec3(.2126,.7152,.0722));col=max(mix(vec3(l),col,saturation),0.);gl_FragColor=vec4(col,1.);}
-  else gl_FragColor=vec4(col,c0);
+  else gl_FragColor=vec4(col,sky>.5?-max(c0,.01):c0);
  }`;
 
 export class TiltShiftPass extends Pass{

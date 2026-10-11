@@ -44,7 +44,8 @@ const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uni
   float l1=.5*(E+G+root),l2=.5*(E+G-root);
   vec2 v=vec2(l1-E,-F);vec2 d=length(v)>1e-6?normalize(v):vec2(0.,1.);
   float depth=texture2D(tDepth,vUv).r;
-  if(depth>.99999){gl_FragColor=vec4(paper(base.rgb,d),base.a);return;}
+  // Sky stays untouched: posterising a smooth gradient shows up as bands.
+  if(depth>.99999){gl_FragColor=base;return;}
   // Brush size shrinks with view distance: a stroke covers about the same patch of the world, so distant
   // buildings shrink on screen without being smeared. Very small brushes skip the filter and keep full detail.
   float viewZ=near*far/(far-depth*(far-near));
