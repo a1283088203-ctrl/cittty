@@ -98,7 +98,7 @@ export class PaintPass extends Pass{
  private blur=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},texel:{value:new T.Vector2()},dir:{value:new T.Vector2(1,0)}},vertexShader:VERT,fragmentShader:BLUR,depthTest:false,depthWrite:false});
  /** Brush radius as a fraction of the screen height (0.0075 = about 8 px at 1080p), and its bounds as multiples of
   * that: strokes never get smaller than MIN or larger than MAX, whatever the screen size or zoom. */
- static BRUSH=.0075;static MIN=.6;static MAX=1;
+ static BRUSH=.0052;static MIN=.6;static MAX=1;
  // refDepth: view distance (world units) at which strokes reach full size; nearer stays full, farther shrinks.
  private paint=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},tTensor:{value:null},tDepth:{value:null},texel:{value:new T.Vector2()},radius:{value:6},near:{value:.1},far:{value:220},refDepth:{value:24},minScale:{value:PaintPass.MIN},maxScale:{value:PaintPass.MAX},grainScale:{value:1},jitter:{value:new T.Vector4()}},vertexShader:VERT,fragmentShader:KUWAHARA,depthTest:false,depthWrite:false});
  private quad=new FullScreenQuad();

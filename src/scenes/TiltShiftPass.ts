@@ -71,7 +71,7 @@ export class TiltShiftPass extends Pass{
  static RADIUS=.016;static BAND=.14;static DEPTH_RANGE=.55;static SATURATION=1.12;
  private temp=new T.WebGLRenderTarget(1,1,{type:T.HalfFloatType,depthBuffer:false});
  /** Height of one brush-mask tile as a fraction of the screen height. */
- static BRUSH_TILE=.6;
+ static BRUSH_TILE=.4;
  private brush=TiltShiftPass.loadBrush();
  private material=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},tDepth:{value:null},tBrush:{value:this.brush},texel:{value:new T.Vector2()},brushScale:{value:new T.Vector2(1,1)},jitter:{value:new T.Vector4()},
   near:{value:.1},far:{value:220},focus:{value:40},maxRadius:{value:10},band:{value:TiltShiftPass.BAND},depthRange:{value:TiltShiftPass.DEPTH_RANGE},
