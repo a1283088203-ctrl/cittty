@@ -30,9 +30,8 @@ function ribbon(g:T.Object3D,f:Face,y:number,ph:number,skip?:(u:number)=>boolean
  const span=f.span-.3,cols=Math.max(2,Math.round(span/.52)),pw=span/cols;
  for(let c=0;c<cols;c++){
   const u=-span/2+pw*(c+.5);if(skip?.(u))continue;
+  // One solid pane per bay; the mullion and transom bars were removed.
   pane(g,f,pw-.14,ph,u,y);
-  // Slim mullion and a transom near the top split each pane into an openable light.
-  onFace(g,f,.022,ph,.016,u,y,.026,SLAB);onFace(g,f,pw-.14,.02,.016,u,y+ph*.28,.026,SLAB);
  }
 }
 /** Cantilevered balcony: slab, glass balustrade with a dark handrail, optional potted plant. */

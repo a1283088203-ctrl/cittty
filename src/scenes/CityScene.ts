@@ -112,12 +112,18 @@ export class CityScene{
  /** Bump after editing `grades` in place so the next frame re-applies them. */
  gradeRevision=0;
  setStreetLights(positions:T.Vector3[],night:number){this.streetLights.forEach((light,i)=>{light.intensity=positions[i]?night*2.4:0;if(positions[i])light.position.copy(positions[i]);});}
- render(camera:T.PerspectiveCamera){this.mountains.setView(camera);if(this.composer)this.composer.render();else this.renderer.render(this.scene,camera);}
+ private shadowFrame=0;
+ render(camera:T.PerspectiveCamera){this.mountains.setView(camera);
+  // The shadow map redraws the whole scene; the sun moves slowly, so refreshing it every other frame (every third on
+  // phones) halves that cost without a visible change.
+  this.renderer.shadowMap.autoUpdate=false;if(this.shadowFrame++%(MOBILE?3:2)===0)this.renderer.shadowMap.needsUpdate=true;if(this.composer)this.composer.render();else this.renderer.render(this.scene,camera);}
  /** Native-resolution painted look, so zoomed-out detail stays sharp. The buffer is capped at 2560x1440 on desktop
   * and 1920x1080 on phones; brush size scales with it (PaintPass.setSize), so strokes look the same. */
  // Phones render at most 1280x720: the paint and blur passes cost per pixel, and high-DPI phones otherwise stall.
  private pixelScale(w:number,h:number){
-  return Math.min(devicePixelRatio,MOBILE?1.5:2,(MOBILE?1280:2560)/Math.max(w,h),(MOBILE?720:1440)/Math.min(w,h));}
+  // Desktop caps at 1920x1080 (was 2560x1440): the painterly filter softens edges anyway, so the extra pixels
+  // cost ~80% more filter work for no visible gain.
+  return Math.min(devicePixelRatio,MOBILE?1.5:2,(MOBILE?1280:1920)/Math.max(w,h),(MOBILE?720:1080)/Math.min(w,h));}
  setCrt(on:boolean){if(this.crt)this.crt.enabled=on;}
  resize(w:number,h:number){const scale=this.pixelScale(w,h);this.renderer.setPixelRatio(scale);this.renderer.setSize(w,h);if(this.composer){this.composer.setPixelRatio(scale);this.composer.setSize(w,h);}if(this.crt)(this.crt.uniforms.resolution.value as T.Vector2).set(w*scale,h*scale);}
 }

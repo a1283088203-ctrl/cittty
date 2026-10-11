@@ -27,7 +27,7 @@ const BLUR=`uniform sampler2D tDiffuse;uniform vec2 texel,dir;varying vec2 vUv;
 
 const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uniform float radius,near,far,refDepth,minScale,maxScale,grainScale;varying vec2 vUv;
  // Fixed sample grid (13x13, 7x7 on phones) stretched over the brush, so cost and look do not depend on screen resolution.
- const int N=${MOBILE?3:6};
+ const int N=${MOBILE?3:5};
  float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
  float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
  vec3 paper(vec3 c,vec2 flow){
