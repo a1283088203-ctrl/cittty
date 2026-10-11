@@ -26,7 +26,27 @@ const BLUR=`uniform sampler2D tDiffuse;uniform vec2 texel,dir;varying vec2 vUv;
   for(int i=-4;i<=4;i++){float g=exp(-float(i*i)/8.);c+=texture2D(tDiffuse,vUv+dir*float(i)*texel)*g;w+=g;}
   gl_FragColor=c/w;}`;
 
-const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uniform float radius,near,far,refDepth,minScale,maxScale,grainScale;uniform vec4 jitter;varying vec2 vUv;
+const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uniform float radius,near,far,refDepth,minScale,maxScale,grainScale,outlineStrength;uniform vec4 jitter;uniform vec3 envTint;varying vec2 vUv;
+ float linZ(vec2 uv){float d=texture2D(tDepth,uv).r;return near*far/(far-d*(far-near));}
+ // Buildings carry alpha .5 (walls, roofs) or .25 (lit windows); everything else is 1 or .75.
+ float tagged(float a){return step(a,.6);}
+ /* Thin building outline, one pixel wide on the building side: silhouettes (a farther or non-building neighbour)
+  * and creases (depth curvature at corners and roof edges). The line is the building's own colour darkened and
+  * tinted by the ambient light, never black, so it shifts with day, dusk and night. */
+ vec3 outline(vec3 c,vec4 base,float z){
+  if(tagged(base.a)<.5)return c;
+  vec2 dx=vec2(texel.x,0.),dy=vec2(0.,texel.y);
+  float l=linZ(vUv-dx),r=linZ(vUv+dx),b=linZ(vUv-dy),t=linZ(vUv+dy);
+  float other=4.-tagged(texture2D(tDiffuse,vUv-dx).a)-tagged(texture2D(tDiffuse,vUv+dx).a)-tagged(texture2D(tDiffuse,vUv-dy).a)-tagged(texture2D(tDiffuse,vUv+dy).a);
+  float jump=max(max(l,r),max(b,t))-z;
+  float silhouette=max(smoothstep(.04+z*.012,.12+z*.03,jump),step(.5,other));
+  float curvature=max(max(l+r-2.*z,b+t-2.*z),0.);
+  float crease=smoothstep(.025+z*.0015,.16+z*.009,curvature);
+  // Fade with distance so far buildings do not turn into dark specks.
+  float edge=max(silhouette,crease*.8)*(1.-smoothstep(45.,110.,z));
+  vec3 ink=c*.52*mix(vec3(1.),envTint,.5);
+  return mix(c,ink,edge*outlineStrength);
+ }
  // Fixed sample grid (13x13, 7x7 on phones) stretched over the brush, so cost and look do not depend on screen resolution.
  const int N=${MOBILE?3:5};
  float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
@@ -89,7 +109,8 @@ const KUWAHARA=`uniform sampler2D tDiffuse,tTensor,tDepth;uniform vec2 texel;uni
   painted*=painted;
   // The filter works on clamped colour; carry over any HDR excess (lamps, lit windows) so bloom still sees it.
   painted+=max(base.rgb-1.,0.);
-  gl_FragColor=vec4(paper(painted,d),base.a);}`;
+  // Outline after the paint filter, so the line stays crisp instead of being smeared into the strokes.
+  gl_FragColor=vec4(outline(paper(painted,d),base,viewZ),base.a);}`;
 
 export class PaintPass extends Pass{
  private tensorA=new T.WebGLRenderTarget(1,1,{type:T.HalfFloatType,depthBuffer:false});
@@ -99,8 +120,17 @@ export class PaintPass extends Pass{
  /** Brush radius as a fraction of the screen height (0.0075 = about 8 px at 1080p), and its bounds as multiples of
   * that: strokes never get smaller than MIN or larger than MAX, whatever the screen size or zoom. */
  static BRUSH=.0052;static MIN=.6;static MAX=1;
+ /** Building outline opacity (0 = off, 1 = full ink). */
+ static OUTLINE=.75;
+ private envColor=new T.Color();
+ /** Outline tint: the ambient light plus sky/fog colour, normalised to its hue so only the colour shifts. */
+ setEnvironment(ambient:T.Color,intensity:number,sky:T.Color){
+  const c=this.envColor.copy(ambient).multiplyScalar(intensity).add(sky);
+  const l=Math.max(.001,c.r*.2126+c.g*.7152+c.b*.0722);
+  (this.paint.uniforms.envTint.value as T.Color).setRGB(c.r/l,c.g/l,c.b/l);
+ }
  // refDepth: view distance (world units) at which strokes reach full size; nearer stays full, farther shrinks.
- private paint=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},tTensor:{value:null},tDepth:{value:null},texel:{value:new T.Vector2()},radius:{value:6},near:{value:.1},far:{value:220},refDepth:{value:24},minScale:{value:PaintPass.MIN},maxScale:{value:PaintPass.MAX},grainScale:{value:1},jitter:{value:new T.Vector4()}},vertexShader:VERT,fragmentShader:KUWAHARA,depthTest:false,depthWrite:false});
+ private paint=new T.ShaderMaterial({uniforms:{tDiffuse:{value:null},tTensor:{value:null},tDepth:{value:null},texel:{value:new T.Vector2()},radius:{value:6},near:{value:.1},far:{value:220},refDepth:{value:24},minScale:{value:PaintPass.MIN},maxScale:{value:PaintPass.MAX},grainScale:{value:1},jitter:{value:new T.Vector4()},envTint:{value:new T.Color(1,1,1)},outlineStrength:{value:PaintPass.OUTLINE}},vertexShader:VERT,fragmentShader:KUWAHARA,depthTest:false,depthWrite:false});
  private quad=new FullScreenQuad();
  depth:T.DepthTexture|null=null;
  constructor(private camera:T.PerspectiveCamera){super();}

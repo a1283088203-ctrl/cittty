@@ -2,10 +2,11 @@ import * as T from 'three';
 const geometry=new T.BoxGeometry(1,1,1);
 const materials=new Map<number,T.MeshLambertMaterial>();
 const buildingMaterials=new Map<T.MeshLambertMaterial,T.MeshLambertMaterial>();
-const TAG_BUILDINGS=false;
+// On: the paint pass reads these alpha tags to draw thin building outlines.
+const TAG_BUILDINGS=true;
 /** Reserve opaque building alpha as a boundary-strength tag; no extra geometry pass. */
 export function tagBuildingMaterial(source:T.Material){
- // The outline pass that read these alpha tags is gone (painted look), so tagging is off; call sites stay as they are.
+ // Building surfaces write alpha .5 (lit windows .25) so the paint pass can outline buildings and nothing else.
  if(!TAG_BUILDINGS||!(source instanceof T.MeshLambertMaterial))return source;
  let tagged=buildingMaterials.get(source);
  if(!tagged){const alpha=source.userData.windowLight?'0.25':'0.5';tagged=source.clone();tagged.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>','#include <opaque_fragment>\n gl_FragColor.a = '+alpha+';');};tagged.customProgramCacheKey=()=> 'building-boundary-tag-'+alpha;buildingMaterials.set(source,tagged);}
